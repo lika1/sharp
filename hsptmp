@@ -1,573 +1,512 @@
-#include "mod_usbio.as"
-#uselib "winmm.dll"
-#func  global waveOutSetVolume "waveOutSetVolume" int, int
-
-#module
-#deffunc setvolume int right, int left, local i
-	i = limit(right, 0, 100) * 0xFFFF / 100, limit(left, 0, 100) * 0xFFFF / 100
-	waveOutSetVolume 0xFFFFFFFF, (i.0 << 16) + i.1
-	return
-#global
-
 #include "hgimg3.as"	;３Ｄを使いたいとき、ＨＳＰ拡張プラグインのヘッダーファイルが必要
 #include "mod_joystick.as"
-#include "lib/hmm.as" 
 
+	////////////////////////////////////////////
+	//定義区
+	//すべての変数や関数はここで定義をしておきます、モデルもここで読み込みます。
+	////////////////////////////////////////////
 	screen 0,1024,768,0,0,0  ;フロント画面の作成
-	screen 2,1024,619,0,0,0	 ;速度画面の作成
-	color : boxf
-	gsel 0,1				;フロント画面アクティブ
-	color : boxf
 	
-	randomize	;乱数の初期化
-	dsinit		;効果音を扱う上での初期化
+	randomize				;乱数の初期化
 	onexit	*exit	;プログラム終了時の割り込み処理（×ボタンを押すとそこ（指定ラベル）に飛ぶ）
-	font msgothic,50 : pos 387,359 : color 255,255,255 : print "NOW LODING"
-
-;/*
-	gsel 2,1
-	picload  "pic/速度計初期画面.jpg",1
-	top_page=stat	
-	gsel 0,1
-;*/	
-//--------あらかじめ定義して処理を軽くする--------------------------------------
 	
-	;----定数・道路---------------------
-	#const ROAD_LENGTH	38*40	;長さ
-	#const ROAD_WIDTH	90		;幅
-	#const sampling  100
-	#const SOA1	0				;SOA間隔
-	#const SOA2	500				;SOA間隔
-	#const SOA3	1000			;SOA間隔
+	gsel 0,1				;フロント画面アクティブ
+	color : boxf			;画面全体を黒く塗りつぶして，上部で書かれた文字を消去
+	font msgothic,int(0.0652 * win_ysize)
+	pos (win_xsize/2 - int(0.163 * win_xsize)),(win_ysize/2 - int(0.0326 * win_ysize)) : color 255,255,255 : print "NOW LODING"
 	
-	;----変数の宣言---------------------
+	////////////////////////////////変数の定義////////////////////////////////
 	;配列
-	dim ROAD,3			;道路
-    dim HODOU_LEFT,45	;左側　歩道
-    dim HODOU_RIGHT,45	;右側　歩道
-    dim TREE_LEFT,56	;左側　木
-	dim TREE_RIGHT,56	;右側　木
-	dim t, 36			;危険場面出現タイミング　格納用の配列
-	dim tt, 9			;危険場面（ダミー）出現タイミング　格納用の配列
-	dim iSOA, 45		;SOAの値　危険場面＋ダミーの個数分確保する
-	;変数
-	player_pos_x==0 : player_pos_y==0 : player_pos_z==0		;矢印の位置
-	player_ang_x==0 : player_ang_y==0 : player_ang_z==0		;矢印の向き
-	
-	road_loop==2 : hodou_loop==44 : tree_loop==55		;背景のループ用
+	dim ROAD,3											;道路
+    dim HODOU_LEFT,20									;左側　歩道
+    dim HODOU_RIGHT,20									;右側　歩道
+    dim TREE_LEFT,50									;左側　木
+	dim TREE_RIGHT,50									;右側　木
 
-	nSOA = 0			;危険場面提示番号（ダミー含む）
-	ctflag = 0			;nSOAカウント用のフラグ
-
-	danger_count=0 : danger=" " : danger_type=" " : danger_state=" ": tobidasi=" " : tobi = 0
-	non_danger_count=0 : non_danger=" " : non_danger_type=" " : non_danger_state=" ": keikoku = " "
-	judge=" "
-	target_time = 9999999
+	notesel save_data									;サンプリングデータ保存用
+	#const sampling  1000								;データ記録のサンプリング時間
 	
-	speed =0.0
-	b_speed = 0.0
+	kyori = 0.0 : kyori1 = 0.0 : kyori2 = 0.0 : jisoku2 = 0.0			;時速計算用変数
+	aida = 0.0
 	
-	steering_ang = 33089	;ハンドルをまっすぐにした状態の値
-	hs = 0.000000200		;ハンドルの曲がり具合
+	steering_ang = 33089		;ハンドルをまっすぐにした状態の値
+	hs = 0.000000200			;ハンドルの曲がり具合
 	
-	sokudo = -3.5	;3.5 --> 約77.4 km/h
-	seigen_count=0 : seigen=" " 
+	sokudo = -3.5				;3.5 --> 約77.4 km/h
+	speed = 0.0 : car_speed = 0.0 : max_speed = 0.0
+	cnt_n = 0 
+	st_ex = 0
+	time_m = 0.0 : time_s = 0.0
+	time_set = 0.0
 	
-	bbb=150
-	ccc=bbb*4
-	ddd_1=2.9	;危険場面出現位置をどれだけ早めに出現させるかの調整(どれだけ手前に出現させるか)
-	ddd_2=2
+	player_pos_x == 0 : player_pos_y == 0 : player_pos_z == 0	;カメラの位置
+	player_ang_x == 0 : player_ang_y == 0 : player_ang_z == 0	;カメラの向き　
 
-	;文字列型の配列変数
-	sdim outlane,20,200
+	camera_pos_x == 0 : camera_pos_y == 0 : camera_pos_z == 0	;カメラの位置
+	camera_ang_x == 0 : camera_ang_y == 0 : camera_ang_z == 0	;カメラの向き　　
+
+	road_loop　== 0 : road_loop2  == 0							;背景のループ用
+	hodou_loop == 0 : hodou_loop2 == 0							;
+	tree_loop  == 0 : tree_loop2  == 0							;
+	frame = 0
 	
-	;危険場面出現時間(合計 36回，12分(720000)ですべて終わらせるようにする)
-	;repeat
-	;	t(cnt) = 10000 * (cnt+1)
-	;loop
-	t(0)=43000   : t(1)=101000    : t(2)=176000     : t(3)=212000    : t(4)=285000     : t(5)=330000    : t(6)=395000    : t(7)=455000
-	t(8)=573000  : t(9)=603000   : t(10)=669000   : t(11)=704000  : t(12)=801000   : t(13)=848000   : t(14)=922000   : t(15)=993000
-	t(16)=1048000 : t(17)=1105000  : t(18)=1157000   : t(19)=1198000  : t(20)=1269000   : t(21)=1327000   : t(22)=1447000   : t(23)=1542000
-	t(24)=1602000 : t(25)=1630000  : t(26)=1660000   : t(27)=1764000  : t(28)=1799000   : t(29)=1870000   : t(30)=1916000   : t(31)=1985000
-	t(32)=2040000 :
-
-	;危険場面以外の出現時間(合計 9回）
-	tt(0)=70000   : tt(1)=360000   : tt(2)=1290000  : tt(3)=1580000   
-
-	;SOAの設定
-	iSOA(0)=SOA3 : iSOA(1)= SOA1: iSOA(2)=SOA1 : iSOA(3)=SOA1 : iSOA(4)=SOA2 : iSOA(5)=SOA1 : iSOA(6)=SOA3 : iSOA(7)=SOA2 : iSOA(8)=SOA2 : iSOA(9)=SOA1
-	iSOA(10)=SOA1: iSOA(11)=SOA1: iSOA(12)=SOA1: iSOA(13)=SOA2: iSOA(14)=SOA2: iSOA(15)=SOA1: iSOA(16)=SOA3: iSOA(17)=SOA3: iSOA(18)=SOA1: iSOA(19)=SOA3
-	iSOA(20)=SOA3: iSOA(21)=SOA3: iSOA(22)=SOA2: iSOA(23)=SOA3: iSOA(24)=SOA2: iSOA(25)=SOA2: iSOA(26)=SOA3: iSOA(27)=SOA2: iSOA(28)=SOA1: iSOA(29)=SOA2
-	iSOA(30)=SOA3: iSOA(31)=SOA3: iSOA(32)=SOA1: iSOA(33)=SOA2: iSOA(34)=SOA2: iSOA(35)=SOA3: iSOA(36)=SOA1: 
-
-//--------聴覚手がかり----------------------------------------------------------
-	dsloadfname "1kHz1s.wav",1
-
-//-------触覚手ががり初期化----------------------------------------------------------
-	uio_out 0, 255		;回路の出力状態を初期化（信号をOFF）
 	
-//--------３Ｄモデル(背景)の準備------------------------------------------------
+	////////////////////////////////関数の定義////////////////////////////////
+	#module
+	
+	//モデルを読み込む関数、失敗すれば提示します。
+	//引数:xファイルのパス
+	//返し値:モデルID
+	#defcfunc readModel str path
+   		addxfile model_id,path												
+		if  model_id < 0 : dialog "失敗："+path,1,"読み込み失敗"
+    return  model_id
+ 
+ 	//アルファチャンネルのない画像(bmp、jpgなど)をテクスチャーとしてを読み込む関数、失敗すれば提示します。
+ 	//引数:画像のパス
+	//返し値:テクスチャ―ID
+	#defcfunc readTex str path
+   		texload path												
+		if stat < 0 : dialog "失敗："+path,1,"読み込み失敗"
+    return stat
+ 
+    //アルファチャンネル付き画像(png、tgaなど)をテクスチャーとしてを読み込む関数、失敗すれば提示します。
+ 	//引数:画像のパス
+	//返し値:テクスチャ―ID
+	#defcfunc readTexAlpha str path
+   		texload2 path											
+		if stat < 0 : dialog "失敗："+path,1,"読み込み失敗"
+    return stat
+
+	#global
+	
+	////////////////////////////////３Ｄモデル(背景)の準備////////////////////////////////
 	hgini ;プラグインの初期化（現在のウインドウでHGIMG3を初期化）
 	
-	;----テクスチャフォント-------------
-	setfont 16,16,12,1				;オリジナルフォント定義
-	texload "pic/fontchr.bmp"			;フォントテクスチャの登録
-		
-	;----背景のモデル-------------------
-	;----空----
-	clscolor $AFBFFC				;背景色の設定
-	addxfile sky_model,"model/skybox.x"	;空のモデルの読み込み
-	modelshade sky_model,0			;モデルのシェーディングモードの設定
-	regobj SKY,sky_model			;空の登録
-	setscale SKY, 30, 30, 30		;空の大きさの設定
-	setpos SKY, 0, 10, 0			;空の位置の設定
-	setefx SKY,$500					;Zバッファを更新しない
-	objproj SKY,1					;オブジェクトのプロジェクション変更　通常のZクリップを無効にする
+	;---------各種テクスチャ--------------------------------------------
+	;テクスチャフォント
+	setfont 16,16,12,1											;オリジナルフォント定義
+	chr = readTex("pic/fontchr.bmp")							;フォントテクスチャの登録
+
+	;眠気評価指示の表示
+	;setuv 0,0,640,480						;※setuvでは流用する画像の大きさを入れるのが普通
+	;texload "文字.bmp"           : moji = stat				;眠気評価指示表示用画像
+	;texload "眠気　正常.bmp"     : kakusei = stat			;「正常」という文字画像
+	;texload "眠気　少し眠い.bmp" : sukosinemui = stat		;「少し眠い」という文字画像
+	;texload "眠気　眠い.bmp"     : kanarinemui = stat		;「眠い」という文字画像
 	
-	;----道路の準備----
-	addmesh road_model,1,40,16,ROAD_WIDTH,ROAD_LENGTH		;道路の設定
-	texload2 "pic/road2(3line)_new.bmp"							;道路のテクスチャの読み込み
-	regobj ROAD.0,road_model,OBJ_GROUND						;道路の登録
-	regobj ROAD.1,road_model,OBJ_GROUND						;
-	regobj ROAD.2,road_model,OBJ_GROUND						;
-	setpos ROAD.0, 0, 0, ROAD_LENGTH						;道路の位置の設定
-	setpos ROAD.1, 0, 0, 0									;
-	setpos ROAD.2, 0, 0, -ROAD_LENGTH						;
+	;カウントダウン用画像
+	setuv 0,0,264,181
+	ready_go = readTex("pic/go.bmp")							;Go!
+	sec_ago1  = readTex("pic/1time.bmp")  						;①
+	sec_ago2  = readTex("pic/2time.bmp") 						;②
+	sec_ago3  = readTex("pic/3time.bmp") 						;③
+	sec_ago15 = readTex("pic/15time.bmp") 						;⑩
 	
-	;----歩道の準備----
-	addxfile hodou_model,"model/hodou.x"							;歩道のモデルの読み込み
-	repeat 45												;左側45個　右側45個 歩道のオブジェクトを作る
+	;---------背景のモデル--------------------------------------------
+	;空
+	clscolor $AFBFFC						;背景色の設定
+	sky_model = readModel("model/skybox.x")	;空のモデルの読み込み
+	modelshade sky_model,0					;モデルのシェーディングモードの設定
+	regobj SKY,sky_model					;空の登録
+	setscale SKY, 30, 30, 30				;空の大きさの設定
+	setpos SKY, 0, 10, 0					;空の位置の設定
+	setefx SKY,$500							;Zバッファを更新しない
+	objproj SKY,1							;オブジェクトのプロジェクション変更　通常のZクリップを無効にする
+
+	;道路の準備(道路は３つのタイルをループさせている→０後方，１足元，２前方）
+	roadTex = readTexAlpha("pic/road2(3line)_onew.bmp")		;道路のテクスチャの読み込み
+	addmesh road_model,1, 12.56, 16, 90, 1520, roadTex		;道路の設定
+	regobj ROAD.0,road_model,OBJ_GROUND			;道路の登録
+	regobj ROAD.1,road_model,OBJ_GROUND			;
+	regobj ROAD.2,road_model,OBJ_GROUND			;
+	setpos ROAD.0, 0, 0.2, -38*40				;道路の位置の設定
+	setpos ROAD.1, 0, 0.2, 0					;
+	setpos ROAD.2, 0, 0.2, 38*40				;
+
+	;歩道の準備
+	hodou_model = readModel("model/hodou.x")				;歩道のモデルの読み込み
+	repeat 20												;左側20個　右側20個 歩道のオブジェクトを作る
 		;右側の歩道											;
-		regobj   HODOU_RIGHT(44-cnt),hodou_model,OBJ_STATIC	;
-		setpos   HODOU_RIGHT(44-cnt), 55, 0, 70*(cnt-9)		;
-		setang   HODOU_RIGHT(44-cnt), 0, M_PI, 0			;
-    	setscale HODOU_RIGHT(44-cnt), 12, 12, 25			;
+		regobj   HODOU_RIGHT(19-cnt),hodou_model,OBJ_STATIC	;
+		setpos   HODOU_RIGHT(19-cnt), 55, 0, 70*(9-cnt)		;
+		setang   HODOU_RIGHT(19-cnt),  0, M_PI, 0			;
+    	setscale HODOU_RIGHT(19-cnt), 12, 12, 25			;
 		;左の歩道											;
-		regobj   HODOU_LEFT(44-cnt),HODOU_model,OBJ_STATIC	;
-		setpos   HODOU_LEFT(44-cnt),-55, 0, 70*(cnt-9)		;
-		setang   HODOU_LEFT(44-cnt),  0, 0, 0				;
-    	setscale HODOU_LEFT(44-cnt), 12, 12, 25				;
-	loop										
+		regobj   HODOU_LEFT(19-cnt),HODOU_model,OBJ_STATIC	;
+		setpos   HODOU_LEFT(19-cnt),-55, 0, 70*(9-cnt)		;
+		setang   HODOU_LEFT(19-cnt),  0, 0, 0				;
+    	setscale HODOU_LEFT(19-cnt), 12, 12, 25				;
+    loop													;
 
-	;----木の準備----	
-	texload2 "pic/tree.tga"																;木のテクスチャの登録
-	addplate tree_model,1,15,30,0,0,255,255,stat									;木の登録																				;
-	repeat 56																		;左側56個　右側56個 木のオブジェクトを作る
-		;右の木
-		regobj TREE_RIGHT(55-cnt), tree_model, OBJ_STATIC|OBJ_TREE|OBJ_LATE			
-		setpos TREE_RIGHT(55-cnt), 40+0.5*rnd(20), -14.5, 28*(cnt-27)+0.5*rnd(10)
-		;左の木
-		regobj TREE_LEFT(55-cnt),  tree_model, OBJ_STATIC|OBJ_TREE|OBJ_LATE			
-		setpos TREE_LEFT(55-cnt), -40-0.5*rnd(20), -14.5, 28*(cnt-27)+0.5*rnd(10)	
-	loop																		
-
-//--------危険場面警告----------------------------------------------------------
-	texload "pic/警告3右.bmp"
-	visual_cue1 = stat
-	texload "pic/警告3左.bmp"
-	visual_cue2 = stat
+	;木の準備
+	treeTex = readTexAlpha("pic/tree.tga")											;木のテクスチャの登録
+	addplate tree_model,1,15,30,0,0,255,255,treeTex									;木の登録
+	repeat 50
+		;右側50個
+		regobj TREE_RIGHT(49-cnt), tree_model, OBJ_STATIC|OBJ_TREE|OBJ_LATE			;
+		setpos TREE_RIGHT(49-cnt), 40+0.5*rnd(20), -14.5, 25*(24-cnt)+0.5*rnd(10)	;
+		;左側50個																	;
+		regobj TREE_LEFT(49-cnt),  tree_model, OBJ_STATIC|OBJ_TREE|OBJ_LATE			;
+		setpos TREE_LEFT(49-cnt), -40-0.5*rnd(20), -14.5, 25*(24-cnt)+0.5*rnd(10)	;
+	loop							;
 	
-;速度標識の提示準備
-	;setuv 0,0,587,422
-	;addplate hyousiki70_80,1,587,422					;モデルを読み込む
-	;texload "hyousiki70-80.bmp"							;道路標識70-80の読み込み
-	;if stat < 0 : title "失敗"
-	;regobj HYOUSIKI3,hyousiki70_80,OBJ_HIDE				;標識70-80の登録
-	;setpos HYOUSIKI3, 34, -18, 0						;標識70-80の初期位置の設定
-	;setscale HYOUSIKI3,0.082,0.082,0.082				;サイズ
+	;---------車両の読み込み--------------------------------------------
+	;先行車両
+    car_model1 = readmodel("model/evo8-silver.x")	;先行車両のモデルの読み込み
+    regobj Leading_CAR,car_model1,OBJ_MOVE			;先行車両の登録
+    setpos Leading_CAR, 0, 0, 310					;先行車両の初期位置の設定
+    setang Leading_CAR, 0, M_PI, 0					;先行車両の向きの設定
+    setscale Leading_CAR, 5.5, 5.5, 5.5				;先行車両の大きさ
 
-	;setuv 0,0,587,422
-	;addplate hyousiki60_70,1,587,422					;モデルを読み込む
-	;texload "hyousiki60-70.bmp"							;道路標識60-70の読み込み
-	;if stat < 0 : title "失敗"
-	;regobj HYOUSIKI2,hyousiki60_70,OBJ_HIDE				;標識60-70の登録
-	;setpos HYOUSIKI2, 34, -18, 0						;標識60-70の初期位置の設定
-	;setscale HYOUSIKI2,0.082,0.082,0.082				;サイズ
+	;他の車
+	car_model2 = readmodel("model/evo8-red.x")		;追い越し車線走行車両のモデルの読み込み
+	car_model3 = readmodel("model/evo8-black.x")	;走行車線走行車両のモデルの読み込み
 
-	;setuv 0,0,587,422
-	;addplate hyousiki50_60,1,587,422					;モデルを読み込む
-	;texload "hyousiki50-60.bmp"							;道路標識50-60の読み込み
-	;if stat < 0 : title "失敗"
-	;regobj HYOUSIKI1,hyousiki50_60,OBJ_HIDE				;標識50-60の登録
-	;setpos HYOUSIKI1, 34, -18, 0						;標識50-60の初期位置の設定
-	;setscale HYOUSIKI1,0.082,0.082,0.082				;サイズ
-	;setpos SEIGEN, 34,-14,bbb*(10000/1000-ddd_2)+ccc	;位置
-
-//--------危険場面－危険物の読み込み--------------------------------------------
-
-	;----危険場面－飛び出す車-----------
-	addxfile car_model1,"model/AE86.x"				;飛び出す車のモデルの読み込み
-	if stat < 0 : title "失敗"
-	;右から飛び出す車
-	regobj DAN_R,car_model1,OBJ_STATIC				;飛び出す車の登録
-	setpos DAN_R, -50, 0, 0							;飛び出す車の初期位置の設定
- 	setang DAN_R, 0, deg2rad(270), 0				;飛び出す車の向きの設定
-	setscale DAN_R, 2.8, 2.8, 2.8					;飛び出す車の大きさの設定
-	setwork  DAN_R, 100, 0, 0						;飛び出す車の向かう目標位置の設定
-	;左から飛び出す車
-	regobj DAN_L,car_model1,OBJ_STATIC				;飛び出す車の登録
-	setpos DAN_L, 50, 0, 0							;飛び出す車の初期位置の設定
- 	setang DAN_L, 0, deg2rad(90), 0					;飛び出す車の向きの設定
-	setscale DAN_L, 2.8, 2.8, 2.8					;飛び出す車の大きさの設定
-	setwork  DAN_L, -100, 0, 0						;飛び出す車の向かう目標位置の設定
-
-	;----路上駐車-----------------------
-	addxfile car_model2,"model/evo8-red.x"			;路駐車両のモデルの読み込み
-	if stat < 0 : title "失敗"
-	addxfile car_model3,"model/evo8-black.x"			;路駐車両のモデルの読み込み
-	if stat < 0 : title "失敗"
-	;駐車車両－右車線
-	regobj DAN_R_F,car_model3,OBJ_HIDE					;路駐車両の登録
-	setpos DAN_R_F, -28, 0,0							;路駐車両の初期位置の設定
- 	setang DAN_R_F, 0, M_PI, 0							;路駐車両の向きの設定
-	setscale DAN_R_F, 5.5, 5.5, 5.5						;路駐車両の大きさの設定
-	;駐車車両－左車線
-	regobj DAN_L_F,car_model2,OBJ_HIDE					;路駐車両の登録
-	setpos DAN_L_F, 28, 0,0								;路駐車両の初期位置の設定
- 	setang DAN_L_F, 0, M_PI, 0							;路駐車両の向きの設定
-	setscale DAN_L_F, 5.5, 5.5, 5.5						;路駐車両の大きさの設定
-
-	;----危険物：コーン-----------------
-	addxfile cone_model,"model/safety-cone.x"					;危険物のモデルの読み込み
-	if stat < 0 : title "失敗"
-	;コーン(左)
- 	regobj DAN_F1L,cone_model,OBJ_HIDE				;コーンの登録
-	setpos DAN_F1L, 10, 0, 0						;コーンの初期位置の設定
- 	setang DAN_F1L, 0, M_PI, 0						;コーンの向きの設定
-	setscale DAN_F1L, 7, 7, 7						;コーンの大きさの設定
-    ;コーン(右)
-    regobj DAN_F1R,cone_model,OBJ_HIDE				;コーンの登録
-	setpos DAN_F1R, -10, 0, 0						;コーンの初期位置の設定
- 	setang DAN_F1R, 0, M_PI, 0						;コーンの向きの設定
-	setscale DAN_F1R, 7, 7, 7						;コーンの大きさの設定
+	;車両A－右車線
+	regobj R_CAR,car_model2,OBJ_STATIC				;追い越し車線走行車両の登録
+	setpos R_CAR, -22, 0, 0							;追い越し車線走行車両の初期位置の設定
+ 	setang R_CAR, 0, M_PI, 0						;追い越し車線走行車両の向きの設定
+	setscale R_CAR, 5.5, 5.5, 5.5					;追い越し車線走行車両の大きさの設定
+	;車両B－左車線
+	regobj L_CAR,car_model3,OBJ_STATIC				;走行車線走行車両の登録
+	setpos L_CAR, 22, 0, 0							;走行車線走行車両の初期位置の設定
+ 	setang L_CAR, 0, M_PI, 0						;走行車線走行車両の向きの設定
+	setscale L_CAR, 5.5, 5.5, 5.5					;走行車線走行車両の大きさの設定
 	
-	;----危険物：バリケード-------------
-	addxfile barricade_model,"model/barricade.x"		;危険物のモデルの読み込み
-	if stat < 0 : title "失敗"
-	;バリケード(左)
-    regobj DAN_F2L,barricade_model,OBJ_HIDE			;バリケードの登録
-	setpos DAN_F2L, 5, 0, 0							;バリケードの初期位置の設定
- 	setang DAN_F2L, 0, M_PI, 0						;バリケードの向きの設定
-	setscale DAN_F2L, 7, 7, 7						;バリケードの大きさの設定
-    ;バリケード(右)
-    regobj DAN_F2R,barricade_model,OBJ_HIDE			;バリケードの登録
-	setpos DAN_F2R, -5, 0, 0						;バリケードの初期位置の設定
- 	setang DAN_F2R, 0, M_PI, 0						;バリケードの向きの設定
-	setscale DAN_F2R, 7, 7, 7						;バリケードの大きさの設定
-
-//--------危険場面のダミー------------------------------------------------------
-
-	;----右から飛び出しそうな車----
-	regobj NON_DAN_R,car_model1,OBJ_HIDE					;飛び出しそうな車の登録
-	setpos NON_DAN_R, -50, 0, 0								;飛び出しそうな車の初期位置の設定
- 	setang NON_DAN_R, 0, deg2rad(270), 0					;飛び出しそうな車の向きの設定
-	setscale NON_DAN_R, 2.8, 2.8, 2.8						;飛び出しそうな車の大きさの設定
-	;----左から飛び出しそうな車----
-	regobj NON_DAN_L,car_model1,OBJ_HIDE					;飛び出す車の登録
-	setpos NON_DAN_L, 50, 0, 0								;飛び出す車の初期位置の設定
- 	setang NON_DAN_L, 0, deg2rad(90), 0						;飛び出す車の向きの設定
-	setscale NON_DAN_L, 2.8, 2.8, 2.8						;飛び出す車の大きさの設定
-	setwork  NON_DAN_L, -100, 0, 0							;飛び出す車の向かう目標位置の設定
-	;----右前の路上駐車----
-	regobj NON_DAN_R_F,car_model3,OBJ_HIDE					;路駐車両の登録
-	setpos NON_DAN_R_F, -28, 0, 0							;路駐車両の初期位置の設定
- 	setang NON_DAN_R_F, 0, M_PI, 0							;路駐車両の向きの設定
-	setscale NON_DAN_R_F, 5.5, 5.5, 5.5						;路駐車両の大きさの設定
-	;----左前の路上駐車----
-	regobj NON_DAN_L_F,car_model2,OBJ_HIDE					;路駐車両の登録
-	setpos NON_DAN_L_F, 28, 0, 0							;路駐車両の初期位置の設定
- 	setang NON_DAN_L_F, 0, M_PI, 0							;路駐車両の向きの設定
-	setscale NON_DAN_L_F, 5.5, 5.5, 5.5						;路駐車両の大きさの設定
-	;----正面のコーン----
-	;右
-    regobj NON_DAN_F1,cone_model,OBJ_HIDE					;コーンの登録
-	setpos NON_DAN_F1, -10, 0, 0							;コーンの初期位置の設定
- 	setang NON_DAN_F1, 0, M_PI, 0							;コーンの向きの設定
-	setscale NON_DAN_F1, 7, 7, 7							;コーンの大きさの設定
-    ;左
-    regobj NON_DAN_F2,cone_model,OBJ_HIDE					;コーンの登録
-	setpos NON_DAN_F2, 10, 0, 0								;コーンの初期位置の設定
- 	setang NON_DAN_F2, 0, M_PI, 0							;コーンの向きの設定
-	setscale NON_DAN_F2, 7, 7, 7							;コーンの大きさの設定
-
-
-//--------カメラの準備----------------------------------------------------------
+	;矢印（自車）
+	setuv 0,0,63,92                    ;矢印の画像を読み込む位置
+	addplate yajirushi_model,1,5,35    ;矢印の大きさ ID,モード,横,縦
+	arrowTex = readTex("pic/矢印3.bmp")	
+	regobj player,yajirushi_model
+	setang player,-M_PI/2,M_PI,0		;矢印の向き???
+	
+	;カメラの準備
 	cammode CAM_MODE_NORMAL				;カメラモードの設定
-	setpos HGOBJ_CAMERA, 0,-6.5, 0.0	;カメラ位置の設定
-	setang HGOBJ_CAMERA,0,M_PI,0.0		;カメラの向きの設定
+	setpos HGOBJ_CAMERA, 0,-5,-30	;カメラ位置の設定
+	setang HGOBJ_CAMERA,0,deg2rad(180),0	;カメラの向きの設定
+    //cammode CAM_MODE_AUTOMOVE,player
+    setwork HGOBJ_CAMERA, 35, M_PI, -5		;カメラの視点,前後,周囲,高さ
+    //setdir HGOBJ_CAMERA,0,-8,0			;セット位置（角度）？横,高さ,前後
 
-//--------ライトの準備----------------------------------------------------------
+	;ライトの準備
 	setang HGOBJ_LIGHT,4.9,M_PI,0		;ライトの向きの設定
     setscale HGOBJ_LIGHT,150,150,150	;ライトの色の設定
 	setdir HGOBJ_LIGHT,50,50,50			;ライトのアンビエント色の設定
 	
-//--------Enterを押したら実験開始-----------------------------------------------
+	
+	////////////////////////////////////////////
+	//実行区
+	//ここでプログラムを実行します
+	////////////////////////////////////////////
+	
+	////////////////////////////////先に設定画面////////////////////////////////
+*re_set
+	setting_data = ""
+	notesel setting_data					;設定情報を保存するメモリノートパッド命令のバッファ名
+	noteload "config/setting_new_data.txt"			;「setting_data」という変数に「setting_new_data.txt」の中身をロードする
+	
+	gsel 0,1				;フロント画面アクティブ
+	boxf					;画面全体を黒く塗りつぶす
+	
+	ddim set_data,12						;テキストから抜き出したデータを一時的に保管したりする変数を定義
+	repeat									;（始）テキストデータから設定情報を取り出すループ（始）
+		noteget set_data(cnt), cnt			;1行ずつデータを取り出し，一時的に保管する為の変数 set_dataに代入
+		if(set_data(cnt) = "") : break		;データが終わったらループを抜け出す
+	loop									;（終）テキストデータから設定情報を取り出すループ（終）
+	
+	;テキストから読み取った内容をそれぞれ変数に格納する
+	win_xsize       = int(set_data(0))		;画面サイズ（x）
+	win_ysize       = int(set_data(1))		;画面サイズ（y）
+	lead_car_speed1 = set_data(2)			;先行車の速度（最低速度）
+	lead_car_speed2 = set_data(3)			;先行車の速度（最高速度）
+	change_speed    = set_data(4)			;先行車の速度変化の段階数
+	adjust_range    = set_data(5)			;先行車の速度調整間隔時間
+	limit_min_range = set_data(6)			;先行車との挙動限界距離（最短）
+	limit_max_range = set_data(7)			;先行車との挙動限界距離（最長）
+	min_range       = set_data(8)			;先行車との適正距離（最短）
+	max_range       = set_data(9)			;先行車との適正距離（最長）
+	left_car_speed  = set_data(10)			;左車線を走行している車の時速
+	right_car_speed = set_data(11)			;右車線を走行している車の時速
+	
+	screen 0,(win_xsize),(win_ysize),0,0,0  					;フロント画面の作成
+	if(win_xsize = 800)&&(win_ysize = 600)   : win_size = 0		;画面の規定サイズ１
+	if(win_xsize = 1024)&&(win_ysize = 768)  : win_size = 1		;画面の規定サイズ２
+	if(win_xsize = 1280)&&(win_ysize = 720)  : win_size = 2		;画面の規定サイズ３
+	if(win_xsize = 1280)&&(win_ysize = 768)  : win_size = 3		;画面の規定サイズ４
+	if(win_xsize = 1360)&&(win_ysize = 768)  : win_size = 4		;画面の規定サイズ５
+	if(win_xsize = 1366)&&(win_ysize = 768)  : win_size = 5		;画面の規定サイズ６
+	if(win_xsize = 1400)&&(win_ysize = 1050) : win_size = 6		;画面の規定サイズ７
+	if(win_xsize = 1920)&&(win_ysize = 1080) : win_size = 7		;画面の規定サイズ８
+	win_size2 = win_size
+	boxf
+	
+	objmode 2, 1 							;この命令によりオブジェクト内のフォント調整がfont命令で，できるようなる
+
+	font_size = int(double(win_ysize) * 0.04558)	;フォントサイズを画面の大きさから設定
+	color 255,255,255 : font msgothic,font_size
+	;画面サイズ（ウインドウサイズに合わせて位置，大きさを自動調整）
+	pos (font_size),(1.5 * font_size)      : mes "画面サイズ"
+	objsize (double(win_xsize)*0.25),(double(win_ysize)*0.05),100		;オブジェクトサイズ変更
+	pos (font_size * 13),(1.5 * font_size) : combox win_size,100,"800×600\n1024×768\n1280×720\n1280×768\n1360×768\n1366×768\n1400×1050\n1920×1050";①
+	;先行車の速度幅（km/h ～ km/h）
+	pos (font_size),(3.5 * font_size)      : mes "先行車の速度幅"
+	pos (font_size * 13),(3.5 * font_size) : input lead_car_speed1,(font_size * 2),(font_size),3;②
+	pos (font_size * 15),(3.5 * font_size) : mes " km/h～"
+	pos (font_size * 19),(3.5 * font_size) : input lead_car_speed2,(font_size * 2),(font_size),3;③
+	pos (font_size * 21),(3.5 * font_size) : mes " km/h"
+	;先行車の速度変化段階数（段階）
+	pos (font_size),(5.5 * font_size)      : mes "先行車の速度変化段階数"
+	pos (font_size * 14),(5.5 * font_size) : input change_speed,(font_size),(font_size),2;④
+	pos (font_size * 15),(5.5 * font_size) : mes " 段階"
+	;先行車の速度調整間隔（秒）
+	pos (font_size),(7.5 * font_size)      : mes "先行車の速度調整間隔"
+	pos (font_size * 14),(7.5 * font_size) : input adjust_range,(2 * font_size),(font_size),3;⑤
+	pos (font_size * 16),(7.5 * font_size) : mes " 秒"
+	;先行車の挙動範囲（ｍ）
+	pos (font_size),(9.5 * font_size)      : mes "先行車の挙動範囲"
+	pos (font_size * 13),(9.5 * font_size) : input limit_min_range,(font_size * 3),(font_size),4;⑥
+	pos (font_size * 16),(9.5 * font_size) : mes " m～"
+	pos (font_size * 19),(9.5 * font_size) : input limit_max_range,(font_size * 3),(font_size),4 ;⑦
+	pos (font_size * 22),(9.5 * font_size) : mes " m"
+	;先行車との適正距離（ｍ）
+	pos (font_size),(11.5 * font_size)      : mes "追従作業の適正距離"
+	pos (font_size * 13),(11.5 * font_size) : input min_range,(font_size * 3),(font_size),4;⑧
+	pos (font_size * 16),(11.5 * font_size) : mes " m～"
+	pos (font_size * 19),(11.5 * font_size) : input max_range,(font_size * 3),(font_size),4 ;⑨
+	pos (font_size * 22),(11.5 * font_size) : mes " m"
+	;左車線の車の時速（㎞/h）
+	pos (font_size),(13.5 * font_size)      : mes "左車線の車の速度"
+	pos (font_size * 13),(13.5 * font_size) : input left_car_speed,(font_size * 2),(font_size),3;⑩
+	pos (font_size * 15),(13.5 * font_size) : mes " km/h"
+	;右車線の車の時速（㎞/h）
+	pos (font_size),(15.5 * font_size) : mes "右車線の車の速度"
+	pos (font_size * 13),(15.5 * font_size) : input right_car_speed,(font_size * 2),(font_size),3;⑪
+	pos (font_size * 15),(15.5 * font_size) : mes " km/h"
+	;ボタンの設置
+	objsize (double(win_xsize)*0.25),(double(win_ysize)*0.08),100					;オブジェクトサイズ変更
+	pos (double(win_xsize)*0.05),(win_ysize - font_size*4)  : button goto "デフォルト", *default_set;⑫
+	pos (double(win_xsize)*0.375),(win_ysize - font_size*4) : button goto "設定を保存", *save_set_data;⑬
+	pos (double(win_xsize)*0.7),(win_ysize - font_size*4) : button goto "実験開始", *start_ex;⑭
+	
+	button_flag = 0
+	objenable 12,0
+	
+	;---------設定画面の待ちループ--------------------------------------------
+*set_up
+	if(win_size ! win_size2){
+		switch win_size
+		case 0
+			win_xsize = 800 : win_ysize = 600 : win_size2 = 0
+			swbreak
+		case 1
+			win_xsize = 1024 : win_ysize = 768 : win_size2 = 1
+			swbreak
+		case 2
+			win_xsize = 1280 : win_ysize = 720 : win_size2 = 2
+			swbreak
+		case 3
+			win_xsize = 1280 : win_ysize = 768 : win_size2 = 3
+			swbreak
+		case 4
+			win_xsize = 1360 : win_ysize = 768 : win_size2 = 4
+			swbreak
+		case 5
+			win_xsize = 1366 : win_ysize = 768 : win_size2 = 5
+			swbreak
+		case 6
+			win_xsize = 1400 : win_ysize = 1050 : win_size2 = 6
+			swbreak
+		case 7
+			win_xsize = 1920 : win_ysize = 1080 : : win_size2 = 7
+			swbreak
+		swend
+	}
+	
+	if(win_xsize = set_data(0))&&(flag = 0)         : button_flag = 0
+	if(win_ysize = set_data(1))&&(flag = 1)         : button_flag = 0
+	if(lead_car_speed1 = set_data(2))&&(flag = 2)   : button_flag = 0
+	if(lead_car_speed2 = set_data(3))&&(flag = 3)   : button_flag = 0
+	if(change_speed = set_data(4))&&(flag = 4)      : button_flag = 0
+	if(adjust_range = set_data(5))&&(flag = 5)      : button_flag = 0
+	if(limit_min_range = set_data(6))&&(flag = 6)   : button_flag = 0
+	if(limit_max_range = set_data(7))&&(flag = 7)   : button_flag = 0
+	if(min_range = set_data(8))&&(flag = 8)         : button_flag = 0
+	if(max_range = set_data(9))&&(flag = 9)         : button_flag = 0
+	if(left_car_speed = set_data(10))&&(flag = 10)  : button_flag = 0
+	if(right_car_speed = set_data(11))&&(flag = 11) : button_flag = 0
+	
+	if(button_flag = 0){
+		objenable 12,0 : objenable 13,1
+		if(win_xsize ! set_data(0))        : button_flag = 1 : flag = 0
+		if(win_ysize ! set_data(1))        : button_flag = 1 : flag = 1
+		if(lead_car_speed1 ! set_data(2))  : button_flag = 1 : flag = 2
+		if(lead_car_speed2 ! set_data(3))  : button_flag = 1 : flag = 3
+		if(change_speed ! set_data(4))     : button_flag = 1 : flag = 4
+		if(adjust_range ! set_data(5))     : button_flag = 1 : flag = 5
+		if(limit_min_range ! set_data(6))  : button_flag = 1 : flag = 6
+		if(limit_max_range ! set_data(7))  : button_flag = 1 : flag = 7
+		if(min_range ! set_data(8)) 	   : button_flag = 1 : flag = 8
+		if(max_range ! set_data(9))	       : button_flag = 1 : flag = 9
+		if(left_car_speed ! set_data(10))  : button_flag = 1 : flag = 10
+		if(right_car_speed ! set_data(11)) : button_flag = 1 : flag = 11
+	}
+	if(button_flag =1) : objenable 12,1 : objenable 13,0
+	
+	wait 2
+	goto *set_up
+	
+	;---------デフォルト設定を読み込むサブルーチン--------------------------------------------
+*default_set
+	setting_data = ""
+	notesel setting_data					;設定情報を保存するメモリノートパッド命令のバッファ名
+	noteload "config/default_data.txt"			;「setting_data」という変数に「setting_new_data.txt」の中身をロードする
+	notesave "config/setting_new_data.txt"
+	goto *re_set
+	
+	;---------今の設定を保存するサブルーチン--------------------------------------------
+*save_set_data
+	sdim set_data2,12	
+	;配列に新しい設定情報を格納(保存するとき文字列にしないと実数と整数の違いによりエラーが出る）
+	set_data2(0)  = str(win_xsize)			;画面サイズ（x）
+	set_data2(1)  = str(win_ysize)			;画面サイズ（y）
+	set_data2(2)  = str(lead_car_speed1)	;先行車の速度（最低速度）
+	set_data2(3)  = str(lead_car_speed2)	;先行車の速度（最高速度）
+	set_data2(4)  = str(change_speed)		;先行車の速度変化の段階数
+	set_data2(5)  = str(adjust_range)		;先行車の速度変化の段階数
+	set_data2(6)  = str(limit_min_range)	;先行車との適正距離（最短）
+	set_data2(7)  = str(limit_max_range)	;先行車との適正距離（最長）
+	set_data2(8)  = str(min_range)			;先行車との適正距離（最短）
+	set_data2(9)  = str(max_range)			;先行車との適正距離（最長）
+	set_data2(10) = str(left_car_speed)		;左車線を走行している車の時速
+	set_data2(11) = str(right_car_speed)	;右車線を走行している車の時速
+	
+	setting_data = ""
+	notesel setting_data
+	;テキストに新しい設定を上書きする
+	repeat 12								;（始）テキストデータから設定情報を取り出すループ（始）
+		noteadd set_data2(cnt), cnt, 1
+		notesave "config/setting_new_data.txt"
+	loop
+	goto *re_set
+	
+	////////////////////////////////実行開始////////////////////////////////
+*start_ex
+	
+	//設定した値を変数へ代入する
+	;追従作業のフィードバック
+	BLUE_FRAME_OFFSET_X	 = win_xsize/2								;画面中心からのオフセット　X
+	BLUE_FRAME_OFFSET_Y	 = win_ysize/2								;画面中心からのオフセット　Y
+	BLUE_FRAME_WIDTH	 = int(0.0977*win_xsize)					;横の長さ
+	BLUE_FRAME_HEIGHT	 = int(0.0912*win_ysize)					;縦の長さ
+	BLUE_FRAME_THICKNESS = int(0.0153*win_xsize*win_xsize/1000)		;線の太さ
+
+	SHAKAN_MIN = double(min_range)/0.165							;枠から出たとみなす距離
+	SHAKAN_MAX = double(max_range)/0.165							;枠から出たとみなす距離
+	LIM_SHAKAN_MIN = double(limit_min_range)/0.165					;枠から出たとみなす距離
+	LIM_SHAKAN_MAX = double(limit_max_range)/0.165					;枠から出たとみなす距離
+	
+	BLUE_FRAME_CENTER_X	=	BLUE_FRAME_OFFSET_X ;+ (ginfo_sizex/2)
+	BLUE_FRAME_CENTER_Y	=	BLUE_FRAME_OFFSET_Y ;+ (ginfo_sizey/2)
+	
+	;カウントダウン番号，眠気評価の画像の大きさ・座標用変数
+	sign_xsize = int(0.3868 * win_xsize)			;画像の大きさ(X座標）
+	sign_ysize = int(0.3529 * win_ysize)			;画像の大きさ(Y座標）
+	sign_xpos  = (win_xsize - sign_xsize)/2		;画像の座標(X座標）
+	sign_ypos  = int(0.326 * win_ysize)			;画像の座標(Y座標）
+	;眠気評価用の大きさ・座標用変数
+	nemuke_xsize = int(0.625 * win_xsize)			;画像の大きさ(X座標）
+	nemuke_ysize = int(0.625 * win_ysize)			;画像の大きさ(Y座標）
+	nemuke_xpos  = int(0.323 * win_xsize)			;画像の座標(X座標）
+	nemuke_ypos  = int(0.469 * win_ysize)			;画像の座標(Y座標）
+	
+	;左車線・右車線の自動車の速度用変数
+	L_CAR_S = 0.2777778 * double(left_car_speed) * 0.015 * 6.0		;左車線を走行してる車の移動量
+	R_CAR_S = 0.2777778 * double(right_car_speed) * 0.015 * 6.0		;右車線を走行してる車の移動量
+	
+	gsel 0,1				;フロント画面アクティブ
+	clrobj					;前半部のボタンやインプットボックスなどを消去
+	
+	;Enterを押すことを待ちます
 	repeat
 		hgdraw
 	
-		hggettime time,0		;hgini命令を通過してからの経過時間を 1ms 単位で取得	 ※ただし、上限は100000 msまで,それを超えると0 msから数え直す
-		hggettime count,1		;上限である100000 msを超えた回数の取得
-		time = count*100000+time	;現在の経過時間の算出
+		getpos HGOBJ_CAMERA,camera_pos_x,camera_pos_y,camera_pos_z	;カメラの位置(座標)を取得
+		getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	
+		getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
+		getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
+	
+		title "pos(c/p)   x:"+ camera_pos_x+"/"+player_pos_x +"   y:"+ camera_pos_y+"/"+player_pos_y +"  z:"+camera_pos_z+"/"+player_pos_z +"     angle(c/p)   x:"+ camera_ang_x+"/"+player_ang_x +"   y:"+ camera_ang_y+"/"+player_ang_y+"  z:"+camera_ang_z+"/"+player_ang_z
+
+		
+		hggettime time,0					;hgini命令を通過してからの経過時間を 1ms 単位で取得	 ※ただし、上限は100000 msまで,それを超えると0 msから数え直す
+		hggettime count,1					;上限である100000 msを超えた回数の取得
+		time = count*100000+time			;現在の経過時間の算出
 			
-		getkey enter,13			
-		if enter=1: hgsync 5 : push_time=time : break
+		getkey enter,13	
+		if enter=1: hgsync 5 : push_time=time : break	;Enterを押したら、今まで経った時間を記録しておい、ループから抜き出す
 		hgsync 5	;時間待ち（処理が速くなり過ぎないように）
+
 	loop
 	
+	;描画のメインループ-----------------------------------------------------------------------------------------
+*main	
+	kyori1 = camera_pos_z 
+	
+	getpos HGOBJ_CAMERA,camera_pos_x,camera_pos_y,camera_pos_z	;カメラの位置(座標)を取得
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	
+	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
+	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
+	
+	title "pos(c/p)   x:"+ camera_pos_x+"/"+player_pos_x +"   y:"+ camera_pos_y+"/"+player_pos_y +"  z:"+camera_pos_z+"/"+player_pos_z +"     angle(c/p)   x:"+ camera_ang_x+"/"+player_ang_x +"   y:"+ camera_ang_y+"/"+player_ang_y+"  z:"+camera_ang_z+"/"+player_ang_z
+	
+	kyori2 = camera_pos_z
 
-/*********************************************************************
-------------------ループ開始ポイント----------------------------------
-**********************************************************************/
-*main
-	getpos HGOBJ_CAMERA,player_pos_x,player_pos_y,player_pos_z		;カメラの位置を取得
-	getang HGOBJ_CAMERA,player_ang_x,player_ang_y,player_ang_z		;カメラの角度を取得
-
-	gosub *alldraw			;描画
-	gosub *player_control	;カメラ操作
+	;--------サブルーチンジャンプ---------------------------------------------------------------------------------
+	gosub *camera_control	;カメラ操作
 	gosub *background		;背景のループ
+	gosub *alldraw			;描画
 
-	;----危険場面---------
-	;危険場面１‐左①
-	if(time >= t(0) )&(danger_count=0 ) : danger="危険" : danger_type="左"   : danger_count++ 
-	;危険場面２‐右①
-	if(time >= t(1) )&(danger_count=1 ) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面３‐左②
-	if(time >= t(2) )&(danger_count=2 ) : danger="危険" : danger_type="左"   : danger_count++ 
-	;危険場面４‐右②
-	if(time >= t(3) )&(danger_count=3 ) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面５‐左③
-	if(time >= t(4) )&(danger_count=4 ) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面６‐左④
-	if(time >= t(5) )&(danger_count=5 ) : danger="危険" : danger_type="左"   : danger_count++ 
-	;危険場面７‐右③
-	if(time >= t(6) )&(danger_count=6 ) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面８‐右④
-	if(time >= t(7) )&(danger_count=7 ) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面９‐右⑤
-	if(time >= t(8) )&(danger_count=8 ) : danger="危険" : danger_type="右"   : danger_count++ 
-	;危険場面１０‐右⑥
-	if(time >= t(9) )&(danger_count=9 ) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面１１‐左⑤
-	if(time >= t(10))&(danger_count=10) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面１２‐左⑥
-	if(time >= t(11))&(danger_count=11) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面１３‐左⑦
-	if(time >= t(12))&(danger_count=12) : danger="危険" : danger_type="左"   : danger_count++ 
-	;危険場面１４‐右⑦
-	if(time >= t(13))&(danger_count=13) : danger="危険" : danger_type="右"   : danger_count++ 
-	;危険場面１５‐左⑧
-	if(time >= t(14))&(danger_count=14) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面１６‐右⑧
-	if(time >= t(15))&(danger_count=15) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面１７
-	if(time >= t(16))&(danger_count=16) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面１８
-	if(time >= t(17))&(danger_count=17) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面１９
-	if(time >= t(18))&(danger_count=18) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面２０
-	if(time >= t(19))&(danger_count=19) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面２１
-	if(time >= t(20))&(danger_count=20) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面２２
-	if(time >= t(21))&(danger_count=21) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面２３
-	if(time >= t(22))&(danger_count=22) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面２４
-	if(time >= t(23))&(danger_count=23) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面２５
-	if(time >= t(24))&(danger_count=24) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面２６
-	if(time >= t(25))&(danger_count=25) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面２７
-	if(time >= t(26))&(danger_count=26) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面２８
-	if(time >= t(27))&(danger_count=27) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面２９
-	if(time >= t(28))&(danger_count=28) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面３０
-	if(time >= t(29))&(danger_count=29) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面３１
-	if(time >= t(30))&(danger_count=30) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面３２
-	if(time >= t(31))&(danger_count=31) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面３３
-	if(time >= t(32))&(danger_count=32) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面３４
-	if(time >= t(33))&(danger_count=33) : danger="危険" : danger_type="右" : danger_count++ 
-	;危険場面３５
-	if(time >= t(34))&(danger_count=34) : danger="危険" : danger_type="左" : danger_count++ 
-	;危険場面３６
-	if(time >= t(35))&(danger_count=35) : danger="危険" : danger_type="右" : danger_count++ 
+	//時速計算 
+	jisoku2 = -(39.996 * speed +0.1324)					;speedの値から時速を算出※ただしPCの処理能力により変わる恐れアリ
+	if jisoku2<=0 : jisoku2=0							;speedが0だとマイナスになるので修正
 
-	;----危険場面のダミー----
-	;ダミー１‐左後
-	if(time >= tt(0) )&(not_danger_count=0 ) : non_danger="なし" : non_danger_type="左" : not_danger_count++ : catch_trial = 1	
-	;ダミー２‐前
-	if(time >= tt(1) )&(not_danger_count=1 ) : non_danger="なし" : non_danger_type="右" : not_danger_count++ : catch_trial = 1	
-	;ダミー３‐前
-	if(time >= tt(2) )&(not_danger_count=2 ) : non_danger="なし" : non_danger_type="右" : not_danger_count++ : catch_trial = 1	
-	;ダミー４‐左
-	if(time >= tt(3) )&(not_danger_count=3 ) : non_danger="なし" : non_danger_type="左" : not_danger_count++ : catch_trial = 1
-	;ダミー５‐右前
-	if(time >= tt(4) )&(not_danger_count=4 ) : non_danger="なし" : non_danger_type="右" : not_danger_count++ : catch_trial = 1
-	;ダミー６‐左
-	if(time >= tt(5) )&(not_danger_count=5 ) : non_danger="なし" : non_danger_type="左" : not_danger_count++ : catch_trial = 1
-	;ダミー７‐右前
-	if(time >= tt(6) )&(not_danger_count=6 ) : non_danger="なし" : non_danger_type="右" : not_danger_count++ : catch_trial = 1
-	;ダミー８‐左
-	if(time >= tt(7) )&(not_danger_count=7 ) : non_danger="なし" : non_danger_type="左" : not_danger_count++ : catch_trial = 1
-	;ダミー９‐前
-	if(time >= tt(8) )&(not_danger_count=8 ) : non_danger="なし" : non_danger_type="右" : not_danger_count++ : catch_trial = 1	
+	if data.8 = 512 : goto *exit					;ハンドルのレバーを倒すと終了
+
+	kyori = kyori + speed*cos(camera_ang_y)
+
+	aida = kyori2 - kyori1
 	
-
-	;title "時速: "+jisoku+"km/h "+player_pos_x+""+player_pos_y+" "+player_pos_z+"  speed: "+speed +"  data.3 "+data.3+"
-	;----危険場面の描画----
-	if("危険"=danger) : gosub *draw_danger : gosub *danger_decision
-	if("なし"=non_danger) : gosub *draw_not_danger : gosub *non_danger_decision
+	//title "経過時間 = "+elasped_time+" (s)    speed : "+ speed +"  brake_on : "+ brake_on+"   jisoku: "+ aida*0.166/0.015*3.6
 	
-//時速計算
-	if (time - (s_time*sampling)) >= s_time{
-		;kyori1 = camera_pos_z
-		;jisoku = (kyori1-kyori2) * 1.09375 * 3.6	;km/h
-		;kyori2 = kyori1
-		//時速計算 
-		jisoku = 39.996 * speed +0.1324					;speedの値から時速を算出※ただしPCの処理能力により変わる恐れアリ
-		if jisoku<=0.0 : jisoku=0.0						;speedが0だとマイナスになるので修正
-		gosub *abc	;データ保存用サンプリング時間
-		;s_time++
-	}
-	goto *main
+	if (st_ex = 1)&&(time - start_time - s_time*sampling) >= 0 : gosub *sampling_data	;データ保存用サンプリング時間
+	
+	camera_pos_z2 = camera_pos_z	;現在のcamera_pos_zと、次のcamera_pos_zを比べるためにcamera_pos_z2に内容を保存	
+	
+goto *main
 
 
 /*******************************************************************************
 -------以下、goto/gosub命令によるジャンプ先ラベル-------------------------------
 *******************************************************************************/
 	
-//--------フレーム描画為ののサブルーチン--------------------
-*alldraw
-
-	hgdraw
-	
-	;----経過時間の取得----
-	;経過時間
-	hggettime time,0		;hgini命令を通過してからの経過時間を 1ms 単位で取得	 ※ただし、上限は100000 msまで,それを超えると0 msから数え直す
-	hggettime count,1		;上限である100000 msを超えた回数の取得
-	time = count*100000+time-push_time	;現在の経過時間の算出
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-;速度制限標識の表示（＋提示タイミングの設定）
-	
-	;if time >= 8000 : setobjmode HYOUSIKI,OBJ_XFRONT,2  : setpos HYOUSIKI, 34,-18,player_pos_z + 600 : ;位置
-
-	;if(time >= 5000 )&(seigen_count=0 ) : seigen="あり" : seigen_count++ 
-	;if(time >= 65000 )&(seigen_count=1 ) : seigen="あり" : seigen_count++ 
-	;if(time >= 125000 )&(seigen_count=2 ) : seigen="あり" : seigen_count++ 	
-	;if(time >= 185000 )&(seigen_count=3 ) : seigen="あり" : seigen_count++ 
-	;if(time >= 245000 )&(seigen_count=4 ) : seigen="あり" : seigen_count++ 
-	;if(time >= 305000 )&(seigen_count=5 ) : seigen="あり" : seigen_count++ 
-	;if(time >= 365000 )&(seigen_count=6 ) : seigen="あり" : seigen_count++ 	
-	;if(time >= 425000 )&(seigen_count=7 ) : seigen="あり" : seigen_count++ 
-
-	
-	;if(seigen_count=1)&(seigen="あり"){ 
-	;setpos HYOUSIKI2, 34, -18,player_pos_z + 600			;標識の位置の設定
- 	;setobjmode HYOUSIKI2,OBJ_XFRONT,2						;オブジェクトの表示
-	;seigen = "なし"
-	;}
-
-	;if(seigen_count=2)&(seigen="あり"){ 
-	;setpos HYOUSIKI3, 34, -18,player_pos_z + 600			;標識の位置の設定
-	;setobjmode HYOUSIKI3,OBJ_XFRONT,2						;オブジェクトの表示
-	;seigen = "なし"
-	;}
-
-	;if(seigen_count=3)&(seigen="あり"){ 
-	;setpos HYOUSIKI1, 34, -18,player_pos_z + 600			;標識の位置の設定
-	;setobjmode HYOUSIKI1,OBJ_XFRONT,2						;オブジェクトの表示
-	;seigen = "なし"
-	;}
-
-	;if(seigen_count = 4)&(seigen="あり"){					;2つ目以降の標識を手前から持ってくる
-	;setpos HYOUSIKI2, 34, -18,player_pos_z + 600
-	;seigen = "なし"
-	;}
-
-	;if(seigen_count = 5)&(seigen="あり"){					;2つ目以降の標識を手前から持ってくる
-	;setpos HYOUSIKI3, 34, -18,player_pos_z + 600
-	;seigen = "なし"
-	;}
-
-	;if(seigen_count = 6)&(seigen="あり"){					;2つ目以降の標識を手前から持ってくる
-	;setpos HYOUSIKI1, 34, -18,player_pos_z + 600
-	;seigen = "なし"
-	;}
-
-	;if(seigen_count = 7)&(seigen="あり"){					;2つ目以降の標識を手前から持ってくる
-	;setpos HYOUSIKI2, 34, -18,player_pos_z + 600
-	;seigen = "なし"
-	;}
-
-	;if(seigen_count = 8)&(seigen="あり"){					;2つ目以降の標識を手前から持ってくる
-	;setpos HYOUSIKI3, 34, -18,player_pos_z + 600
-	;seigen = "なし"
-	;}
-
-//----時速提示部（ディスプレイ2）--------------------------------------
-	;fprt "player_pos_x:"+player_pos_x,8,90
-	;fprt "danger_z:"+danger_z,8,110
-	;fprt "player_pos_z:"+player_pos_z,8,130
-	gsel 2,1
-	color : boxf 318,196,694,428 : color 255,255,255
-	font msgothic,130 : pos 450,250 : mes ""+int(jisoku)+""
-	gsel 0,1
-
-	;fprt "jisoku:"+int(jisoku)+" km/h",8,130
-	fprt "time:"+time+"ms",8,150	;画面に経過時間を描画
-	;fprt "nSOA:" + nSOA
-	if (time >= 2040000): dialog "実験が終了しました。",0,"実験終了": goto *exit
-
-//----Vibrotactile Cue-----------------------------------------------------------------------------------------
-	yotei = 255
-	if(target_time<time)&(time<target_time+300){
-		;if(danger_type="前"|danger_type="後ろ"|non_danger_type="前"|non_danger_type="後ろ"){
-		;setvolume 100, 100		;両方のスピーカから警報提示
-		;dsplay 1				;聴覚警報提示
-		;}
-		if(danger_type="右"|danger_type="右前"|danger_type="右後"|non_danger_type="右"|non_danger_type="右前"|non_danger_type="右後"){
-		yotei = 245
-		}
-		if(danger_type="左"|danger_type="左前"|danger_type="左後"|non_danger_type="左"|non_danger_type="左前"|non_danger_type="左後"){
-		yotei = 250
-		}
-	}
-
-	uio_out 0, int(yotei) ;触覚提示出力
-	hgsync 15	;時間待ち（処理が速くなり過ぎないように）
-
-//------操作部------------------------------------------------
-*player_control
+//--------操作------------------------------------------------------------------
+*camera_control
 	//キーボードで操作
 	stick key,15	;操作キーの設定（押しっぱなしでも検出）
-	if 1=key : addang HGOBJ_CAMERA,0.0,0.008,0.00		;カメラの左旋回
-	if 4=key : addang HGOBJ_CAMERA,0.0,-0.008,0.0		;カメラの右旋回
+	if 1=key : addang player,0.0,0.008,0.00		;カメラの左旋回
+	if 4=key : addang player,0.0,-0.008,0.0		;カメラの右旋回
 	
-	if(2=key)&(speed<29050) : speed = speed +0.006615		;カメラの加速
-	if 8=key : speed = speed - 0.00926154					;カメラの減速
+	if(2=key)&(speed<29050) : speed = speed -0.006615		;カメラの加速
+	if 8=key : speed = speed + 0.00926154					;カメラの減速
 	//ジョイスティック（ハンドル）で操作
 	joyGetPosEx data,0	;ハンドル（ゲームパット）の設定
-	handoru = stat
+	jyoutai = stat			;ステアリングとPCが接続されていたら「0」が入る
+	;☆★☆★☆★☆ステアリング型コントローラによるハンドル操作☆★☆★☆★☆
+	if jyoutai=0 : addang player, 0.0, hs*(steering_ang-double(data.2)), 0.0 
 	
-	;----ステアリング型コントローラによるハンドル操作----
-	if handoru = 0 : addang player, 0.0, hs*(steering_ang-double(data.2)), 0.0 
-	;addpos HGOBJ_CAMERA, sokudo*sin(player_ang_y), 0.0,sokudo*cos(player_ang_y) 
-
-	;----ペダル型コントローラによる操作----
-	brake = ""		;ブレーキの判定
-	if (data.3>=(32511+5148.4)) : brake = "軽くブレーキ"							;ブレーキ踏み込み量20%以上で"軽くブレーキ"と判定
-	if (data.3>=(32511+20593.6)): brake = "ブレーキ"								;ブレーキ踏み込み量80%以上で"ブレーキ"と判定
-
 	;----ペダル型コントローラによる操作----
 	pedal = " "		;ブレーキの判定
 	pedal_per = 0.0
@@ -576,453 +515,252 @@
 	
 	;----操作による位置情報への反映----
 	;アクセルの踏み込み量に合わせて最大速度を調整
-	if (31427 <= data.3)&&(data.3 < 32511) : max_speed = 0.1257269		; 0  ～ 5km
-	if (30344 <= data.3)&&(data.3 < 31427) : max_speed = 0.2514538		; 5  ～ 10km
-	if (29260 <= data.3)&&(data.3 < 30344) : max_speed = 0.3771807		;10  ～ 15km
-	if (28176 <= data.3)&&(data.3 < 29260) : max_speed = 0.5029076		;15  ～ 20km
-	if (27093 <= data.3)&&(data.3 < 28176) : max_speed = 0.6286345		;20  ～ 25km
-	if (26009 <= data.3)&&(data.3 < 27093) : max_speed = 0.7543614		;25  ～ 30km
-	if (24925 <= data.3)&&(data.3 < 26009) : max_speed = 0.8800883		;30  ～ 35km
-	if (23841 <= data.3)&&(data.3 < 24925) : max_speed = 1.0058152		;35  ～ 40km
-	if (22758 <= data.3)&&(data.3 < 23841) : max_speed = 1.1315421		;40  ～ 45km
-	if (21674 <= data.3)&&(data.3 < 22758) : max_speed = 1.257269		;45  ～ 50km
-	if (20590 <= data.3)&&(data.3 < 21674) : max_speed = 1.3829959		;50  ～ 55km
-	if (19507 <= data.3)&&(data.3 < 20590) : max_speed = 1.5087228		;55  ～ 60km
-	if (18423 <= data.3)&&(data.3 < 19507) : max_speed = 1.6344497		;60  ～ 65km
-	if (17339 <= data.3)&&(data.3 < 18423) : max_speed = 1.7601766		;65  ～ 70km
-	if (16256 <= data.3)&&(data.3 < 17339) : max_speed = 1.8859035		;70  ～ 75km
-	if (15172 <= data.3)&&(data.3 < 16256) : max_speed = 2.0116304		;75  ～ 80km
-	if (14088 <= data.3)&&(data.3 < 15172) : max_speed = 2.1373573		;80  ～ 85km
-	if (13004 <= data.3)&&(data.3 < 14088) : max_speed = 2.2630842		;85  ～ 90km
-	if (11921 <= data.3)&&(data.3 < 13004) : max_speed = 2.3888111		;90  ～ 95km
-	if (10837 <= data.3)&&(data.3 < 11921) : max_speed = 2.514538		;95  ～ 100km
-	if ( 9753 <= data.3)&&(data.3 < 10837) : max_speed = 2.6402649		;100 ～ 105km
-	if ( 8670 <= data.3)&&(data.3 <  9753) : max_speed = 2.7659918		;105 ～ 110km
-	if ( 7586 <= data.3)&&(data.3 <  8670) : max_speed = 2.8917187		;110 ～ 115km
-	if ( 6502 <= data.3)&&(data.3 <  7586) : max_speed = 3.0174456		;115 ～ 120km
-	if ( 5419 <= data.3)&&(data.3 <  6502) : max_speed = 3.1431725		;120 ～ 125km
-	if ( 4335 <= data.3)&&(data.3 <  5419) : max_speed = 3.2688994		;125 ～ 130km
-	if ( 3251 <= data.3)&&(data.3 <  4335) : max_speed = 3.3946263		;130 ～ 135km
-	if ( 2167 <= data.3)&&(data.3 <  3251) : max_speed = 3.5203532		;135 ～ 140km
-	if ( 1084 <= data.3)&&(data.3 <  2167) : max_speed = 3.6460801		;140 ～ 145km
-	if (    0 <= data.3)&&(data.3 <  1084) : max_speed = 3.771807		;145 ～ 150km
+	if (31427 <= data.3)&&(data.3 < 32511) : max_speed = -0.1257269		; 0  ～ 5km
+	if (30344 <= data.3)&&(data.3 < 31427) : max_speed = -0.2514538		; 5  ～ 10km
+	if (29260 <= data.3)&&(data.3 < 30344) : max_speed = -0.3771807		;10  ～ 15km
+	if (28176 <= data.3)&&(data.3 < 29260) : max_speed = -0.5029076		;15  ～ 20km
+	if (27093 <= data.3)&&(data.3 < 28176) : max_speed = -0.6286345		;20  ～ 25km
+	if (26009 <= data.3)&&(data.3 < 27093) : max_speed = -0.7543614		;25  ～ 30km
+	if (24925 <= data.3)&&(data.3 < 26009) : max_speed = -0.8800883		;30  ～ 35km
+	if (23841 <= data.3)&&(data.3 < 24925) : max_speed = -1.0058152		;35  ～ 40km
+	if (22758 <= data.3)&&(data.3 < 23841) : max_speed = -1.1315421		;40  ～ 45km
+	if (21674 <= data.3)&&(data.3 < 22758) : max_speed = -1.257269		;45  ～ 50km
+	if (20590 <= data.3)&&(data.3 < 21674) : max_speed = -1.3829959		;50  ～ 55km
+	if (19507 <= data.3)&&(data.3 < 20590) : max_speed = -1.5087228		;55  ～ 60km
+	if (18423 <= data.3)&&(data.3 < 19507) : max_speed = -1.6344497		;60  ～ 65km
+	if (17339 <= data.3)&&(data.3 < 18423) : max_speed = -1.7601766		;65  ～ 70km
+	if (16256 <= data.3)&&(data.3 < 17339) : max_speed = -1.8859035		;70  ～ 75km
+	if (15172 <= data.3)&&(data.3 < 16256) : max_speed = -2.0116304		;75  ～ 80km
+	if (14088 <= data.3)&&(data.3 < 15172) : max_speed = -2.1373573		;80  ～ 85km
+	if (13004 <= data.3)&&(data.3 < 14088) : max_speed = -2.2630842		;85  ～ 90km
+	if (11921 <= data.3)&&(data.3 < 13004) : max_speed = -2.3888111		;90  ～ 95km
+	if (10837 <= data.3)&&(data.3 < 11921) : max_speed = -2.514538		;95  ～ 100km
+	if ( 9753 <= data.3)&&(data.3 < 10837) : max_speed = -2.6402649		;100 ～ 105km
+	if ( 8670 <= data.3)&&(data.3 <  9753) : max_speed = -2.7659918		;105 ～ 110km
+	if ( 7586 <= data.3)&&(data.3 <  8670) : max_speed = -2.8917187		;110 ～ 115km
+	if ( 6502 <= data.3)&&(data.3 <  7586) : max_speed = -3.0174456		;115 ～ 120km
+	if ( 5419 <= data.3)&&(data.3 <  6502) : max_speed = -3.1431725		;120 ～ 125km
+	if ( 4335 <= data.3)&&(data.3 <  5419) : max_speed = -3.2688994		;125 ～ 130km
+	if ( 3251 <= data.3)&&(data.3 <  4335) : max_speed = -3.3946263		;130 ～ 135km
+	if ( 2167 <= data.3)&&(data.3 <  3251) : max_speed = -3.5203532		;135 ～ 140km
+	if ( 1084 <= data.3)&&(data.3 <  2167) : max_speed = -3.6460801		;140 ～ 145km
+	if (    0 <= data.3)&&(data.3 <  1084) : max_speed = -3.771807		;145 ～ 150km
 
 	;アクセルの踏みこみ量により１フレームでの移動距離を調整
 	if (data.3 < 32511)&&(jyoutai=0) {
-		if(max_speed > speed){
-			if(speed > 0) : speed = speed + 6.0 * 0.002205 * (double(32511 - data.3)/65022.00)
-			if(speed = 0) : speed =  0.000551 * 6.0
+		if(max_speed < speed){
+			if(speed < 0) : speed = speed - 6.0 * 0.002205 * (double(32511 - data.3)/65022.00)
+			if(speed = 0) : speed = - (0.000551 * 6.0)
 		}
 		;アクセルを緩めた時の減速処理
-		if(max_speed < speed) : speed = speed - 0.00926154 * 0.2
+		if(max_speed > speed) : speed = speed + 0.00926154 * 0.2
 	}
 	
 	;エンジンブレーキ（アクセルから足を離したときの処理）
-	if(data.3 = 32511) : speed = speed - 0.00926154 * 0.4
+	if(data.3 = 32511) : speed = speed + 0.00926154 * 0.4
 
 	;ブレーキを踏んだ時の処理
-	if (data.3 > 32511)&&(jyoutai=0) : speed = speed - 6.0 * 0.00308718 * (double(data.3 - 32511)/65022.00)
+	if (data.3 > 32511)&&(jyoutai=0) : speed = speed + 6.0 * 0.00308718 * (double(data.3 - 32511)/65022.00)
 	
-	if(speed<0) : speed=0.0
-	addpos player,-double(speed*sin(player_ang_y)),0.0,-double(speed*cos(player_ang_y))
-	
-	;----操作による位置情報への反映----
-	;addpos HGOBJ_CAMERA,-1.2*sin(player_ang_y),0.0,0.0
-	;getpos HGOBJ_CAMERA,px,py,pz
-	;setpos HGOBJ_CAMERA,px,py,bbb*time/1000	;速度(bbb)を座標に反映させる
+	if(speed>0) : speed=0.0
+	addpos player,double(speed*sin(camera_ang_y)),0.0,double(speed*cos(camera_ang_y))
 		
 	;-----------壁にぶつかった場合に強制的に道路に戻す-----------
-	if (player_pos_x>47.5){
-			setpos HGOBJ_CAMERA,47.5,-5.55,player_pos_z
-			setang HGOBJ_CAMERA,0,M_PI,0
+	if (camera_pos_x>47.5){
+			setpos player,47.5,0,camera_pos_z
+			setang player,-M_PI/2,M_PI,0
+	}else {
+		if (camera_pos_x<-47.5){
+			setpos player,-47.5,0,camera_pos_z
+			setang player,-M_PI/2,M_PI,0
 		}
-		else {
-			if (player_pos_x<-47.5){
-				setpos HGOBJ_CAMERA,-47.5,-5.55,player_pos_z
-				setang HGOBJ_CAMERA,0,M_PI,0
-			}
-		}
+	}
+		
 
-	;----走行車線の判定----	
-	if (-7.3<=player_pos_x<=7.3) : lane = ""
-	if (player_pos_x>=16) : lane = "左"
-	if (player_pos_x<=-16) : lane = "右"
-	if (7.3<player_pos_x)&&(player_pos_x<16) : lane = "左+中央"
-	if (-16<player_pos_x)&&(player_pos_x<-7.3) : lane = "右+中央"
+return
 
-	;----道路からのはみ出し判定----	
-	if (-31<=player_pos_x<=31) : deviation = ""
-	if (player_pos_x>31) : deviation = "逸脱-左"
-	if (player_pos_x<-31) : deviation = "逸脱-右"
-	return
 
 //--------背景のループ----------------------------------------------------------
 *background
 	;----空のループ----
-	setpos SKY,player_pos_x,10,player_pos_z		;カメラの現在位置を中心に、位置を移動させる
+	setpos SKY,camera_pos_x,10,camera_pos_z		;カメラの現在位置を中心に、位置を移動させる
 
 	;----道路のループ----
-	getpos ROAD.road_loop,road_x,road_y,road_z	;一番後ろの歩道の座標を取得（左右同じｚ座標なので代表して右側の座標を取得）
-	;通り過ぎた歩道を前方へ設置
-	if(road_z <= player_pos_z-ROAD_LENGTH/2){
-		addpos ROAD.road_loop,0,0, ROAD_LENGTH*3
-		road_loop--
-		if(road_loop < 0) : road_loop=2		;ループの調整？
-	}
+	road_loop = (abs((int(camera_pos_z)+38*40/2)/(38*40))\3)						;
+	if(camera_pos_z+38*40/2 < 0) : road_loop=2-road_loop							;
+																					;
+	if(road_loop!=road_loop2){														;
+		if(camera_pos_z >= camera_pos_z2) : addpos ROAD.road_loop2,0,0, 38*40*3		;
+		if(camera_pos_z <  camera_pos_z2) : addpos ROAD.road_loop ,0,0,-38*40*3		;
+	}																				;
+	road_loop2 = road_loop															;
+
 
 	;----歩道のループ----
-	getpos HODOU_RIGHT.hodou_loop,hodou_x,hodou_y,hodou_z	;一番後ろの歩道の座標を取得（左右同じｚ座標なので代表して右側の座標を取得）
-	;通り過ぎた歩道を前方へ設置
-	if(hodou_z <= player_pos_z-600){
-		addpos HODOU_RIGHT.hodou_loop,0,0,70*45 : addpos HODOU_LEFT.hodou_loop,0,0,70*45
-		hodou_loop--
-		if(hodou_loop < 0) : hodou_loop=44		;歩道ループの調整？
-	}
+	hodou_loop = (abs((int(camera_pos_z)+62/2)/62)\20)																				;
+	if(camera_pos_z+62/2 < 0) : hodou_loop=19-hodou_loop																			;
+																																	;
+	if(hodou_loop!=hodou_loop2){																									;
+		if(camera_pos_z >= camera_pos_z2) : addpos HODOU_RIGHT.hodou_loop2,0,0, 62*20 : addpos HODOU_LEFT.hodou_loop2,0,0, 62*20	;
+		if(camera_pos_z <  camera_pos_z2) : addpos HODOU_RIGHT.hodou_loop ,0,0,-62*20 : addpos HODOU_LEFT.hodou_loop ,0,0,-62*20	;
+	}																																;
+	hodou_loop2 = hodou_loop
 	
 	;----木のループ----
-	getpos TREE_RIGHT.tree_loop,tree_x,tree_y,tree_z		;一番後ろの木の座標を取得（左右同じｚ座標なので代表して右側の座標を取得）
-	;通り過ぎた木を前方へ設置
-	if(tree_z <= player_pos_z-200){
-		addpos TREE_RIGHT.tree_loop ,0,0,25*56 : addpos TREE_LEFT.tree_loop ,0,0,25*56
-		tree_loop--
-		if(tree_loop < 0) : tree_loop=55
-	}
-	return
-
-//--------危険場面の描画とか----------------------------------------------------
-*draw_danger
-	if(" "=keikoku)&(" "=danger_state) : target_time = time: keikoku = "警告"
-	if(target_time + iSOA(nSOA) >= time): return
-	if(ctflag=0): nSOA++: ctflag=1
+	tree_loop = (abs((int(camera_pos_z)+25/2)/25)\50)																			;
+	if(camera_pos_z+25/2 < 0) : tree_loop=49-tree_loop																			;
+																																;
+	if(tree_loop!=tree_loop2){																									;
+		if(camera_pos_z >= camera_pos_z2) : addpos TREE_RIGHT.tree_loop2,0,0, 25*50 : addpos TREE_LEFT.tree_loop2,0,0, 25*50	;
+		if(camera_pos_z <  camera_pos_z2) : addpos TREE_RIGHT.tree_loop ,0,0,-25*50 : addpos TREE_LEFT.tree_loop ,0,0,-25*50	;
+	}																															;
+	tree_loop2 = tree_loop
 	
-	;危険場面‐右
-	if("右"=danger_type){
-		if(" "=danger_state) : danger_state="ターゲット出現" : gosub *abc_d : setpos DAN_R,-40,0,player_pos_z+420: tobi=1
-		getpos DAN_R,danger_x,danger_y,danger_z
-		if(danger_z - player_pos_z<=500) :	objaim DAN_R, 0, 0, 0.2, 0, 0			;飛び出す車を移動させる
-		;if(danger_z - player_pos_z<=180)&(tobi= 1) : tobidasi="ターゲット移動開始"	:gosub *abc_d	: tobi =0 	
-		if("ターゲット出現"=danger_state)&(danger_z<=player_pos_z){
-			danger_state="ターゲット通過" : danger_type=" " : danger=" " :gosub *abc_d: ctflag=0
-		}
+	;----先行車挙動----
+	getpos Leading_CAR,CAR_pos_x,CAR_pos_y,CAR_pos_z
+	if (camera_pos_z<20) {
 	}
-	;危険場面‐左
-	if("左"=danger_type){
-		if(" "=danger_state) : danger_state="ターゲット出現" :gosub *abc_d : setpos DAN_L,40,0,player_pos_z+420 : tobi=1
-		getpos DAN_L,danger_x,danger_y,danger_z
-		if(danger_z - player_pos_z<=500) : objaim DAN_L, 0, 0, 0.2, 0, 0									;飛び出す車を移動させる
-		;if(danger_z - player_pos_z<=180)&(tobi= 1) : tobidasi="ターゲット移動開始"	:gosub *abc_d	: tobi =0
-		if("ターゲット出現"=danger_state)&(danger_z<=player_pos_z){
-			danger_state="ターゲット通過" : danger_type=" " : danger=" " :gosub *abc_d: ctflag=0
+	else {
+		;先行車の速度を決定
+		if(v_set = 0){
+			car_sokudo = double(lead_car_speed1) + (double(lead_car_speed2) - double(lead_car_speed1))/double(change_speed) * rnd(int(change_speed))
+			v_set = 1
 		}
-	}
-	;危険場面‐前
-	if("前"=danger_type){
-		if(" "=danger_state){
-			danger_state="ターゲット出現" :gosub *abc_d 
-			setobjmode DAN_F1L,OBJ_STATIC,2 : setobjmode DAN_F1R,OBJ_STATIC,2
-			setobjmode DAN_F2L,OBJ_STATIC,2 : setobjmode DAN_F2R,OBJ_STATIC,2
-			setpos DAN_F2L,5,0,player_pos_z + 600 : setpos DAN_F1R,-10,0,player_pos_z + 600 
-			setpos DAN_F1L,10,0,player_pos_z + 600 : setpos DAN_F2R,-5,0,player_pos_z + 600 
-		}
-		getpos DAN_F1L,danger_x,danger_y,danger_z
-		if("ターゲット出現"=danger_state)&(danger_z<=player_pos_z){
-			danger_state="ターゲット通過" : danger_type=" " : danger=" " :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_HIDE,2 : setobjmode DAN_F1R,OBJ_HIDE,2
-			setobjmode DAN_F2L,OBJ_HIDE,2 : setobjmode DAN_F2R,OBJ_HIDE,2
-		}
-	}
-	;危険場面‐右前
-	if("右前"=danger_type){
-		if(" "=danger_state){
-			danger_state="ターゲット出現" :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_STATIC,2 : setobjmode DAN_F1R,OBJ_STATIC,2 : setobjmode DAN_R_F,OBJ_STATIC,2
-			setobjmode DAN_F2L,OBJ_STATIC,2 : setobjmode DAN_F2R,OBJ_STATIC,2
-			setpos DAN_F2L,5,0,player_pos_z + 600 : setpos DAN_F1R,-10,0,player_pos_z + 600 : setpos DAN_R_F,-28,0,player_pos_z + 600
-			setpos DAN_F1L,10,0,player_pos_z + 600 : setpos DAN_F2R,-5,0,player_pos_z + 600 
-		}
-		getpos DAN_F1L,danger_x,danger_y,danger_z
-		if("ターゲット出現"=danger_state)&(danger_z<=player_pos_z){
-			danger_state="ターゲット通過" : danger_type=" " : danger=" " :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_HIDE,2 : setobjmode DAN_F1R,OBJ_HIDE,2 : setobjmode DAN_R_F,OBJ_HIDE,2
-			setobjmode DAN_F2L,OBJ_HIDE,2 : setobjmode DAN_F2R,OBJ_HIDE,2
-		}
-	}
-	;危険場面‐左前
-	if("左前"=danger_type){
-		if(" "=danger_state){
-			danger_state="ターゲット出現" :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_STATIC,2 : setobjmode DAN_F1R,OBJ_STATIC,2 : setobjmode DAN_L_F,OBJ_STATIC,2
-			setobjmode DAN_F2L,OBJ_STATIC,2 : setobjmode DAN_F2R,OBJ_STATIC,2
-			setpos DAN_F2L,5,0,player_pos_z + 600 : setpos DAN_F1R,-10,0,player_pos_z + 600 : setpos DAN_L_F,28,0,player_pos_z + 600
-			setpos DAN_F1L,10,0,player_pos_z + 600 : setpos DAN_F2R,-5,0,player_pos_z + 600 
-		}
-		getpos DAN_F1L,danger_x,danger_y,danger_z
-		if("ターゲット出現"=danger_state)&(danger_z<=player_pos_z){
-			danger_state="ターゲット通過" : danger_type=" " : danger=" " :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_HIDE,2 : setobjmode DAN_F1R,OBJ_HIDE,2 : setobjmode DAN_L_F,OBJ_HIDE,2
-			setobjmode DAN_F2L,OBJ_HIDE,2 : setobjmode DAN_F2R,OBJ_HIDE,2
-		}
-	}
-	;危険場面‐左後
-	if("左後"=danger_type){
-		if(" "=danger_state){
-			danger_state="ターゲット出現" :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_STATIC,2 : setobjmode DAN_F1R,OBJ_STATIC,2
-			setobjmode DAN_F2L,OBJ_STATIC,2 : setobjmode DAN_F2R,OBJ_STATIC,2
-			setpos DAN_F2L,5,0,player_pos_z + 600 : setpos DAN_F1R,-10,0,player_pos_z + 600 
-			setpos DAN_F1L,10,0,player_pos_z + 600 : setpos DAN_F2R,-5,0,player_pos_z + 600 
-		}
-		getpos DAN_F1L,danger_x,danger_y,danger_z
-		if("ターゲット出現"=danger_state)&(danger_z<=player_pos_z){
-			danger_state="ターゲット通過" : danger_type=" " : danger=" " :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_HIDE,2 : setobjmode DAN_F1R,OBJ_HIDE,2
-			setobjmode DAN_F2L,OBJ_HIDE,2 : setobjmode DAN_F2R,OBJ_HIDE,2
-		}
-	}
-	;危険場面‐右後
-	if("右後"=danger_type){
-		if(" "=danger_state){
-			danger_state="ターゲット出現" :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_STATIC,2 : setobjmode DAN_F1R,OBJ_STATIC,2
-			setobjmode DAN_F2L,OBJ_STATIC,2 : setobjmode DAN_F2R,OBJ_STATIC,2
-			setpos DAN_F2L,5,0,player_pos_z + 600 : setpos DAN_F1R,-10,0,player_pos_z + 600 
-			setpos DAN_F1L,10,0,player_pos_z + 600 : setpos DAN_F2R,-5,0,player_pos_z + 600 
-
-		}
-		getpos DAN_F1L,danger_x,danger_y,danger_z
-		if("ターゲット出現"=danger_state)&(danger_z<=player_pos_z){
-			danger_state="ターゲット通過" : danger_type=" " : danger=" " :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_HIDE,2 : setobjmode DAN_F1R,OBJ_HIDE,2
-			setobjmode DAN_F2L,OBJ_HIDE,2 : setobjmode DAN_F2R,OBJ_HIDE,2
-		}
-	}
-	;危険場面‐後ろ
-	if("後ろ"=danger_type){
-		if(" "=danger_state){
-			danger_state="ターゲット出現" :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_STATIC,2 : setobjmode DAN_F1R,OBJ_STATIC,2
-			setobjmode DAN_F2L,OBJ_STATIC,2 : setobjmode DAN_F2R,OBJ_STATIC,2
-			setpos DAN_F2L,5,0,player_pos_z + 600 : setpos DAN_F1R,-10,0,player_pos_z + 600 
-			setpos DAN_F1L,10,0,player_pos_z + 600 : setpos DAN_F2R,-5,0,player_pos_z + 600 
-		}
-		getpos DAN_F1L,danger_x,danger_y,danger_z
-		if("ターゲット出現"=danger_state)&(danger_z<=player_pos_z){
-			danger_state="ターゲット通過" : danger_type=" " : danger=" " :gosub *abc_d
-			setobjmode DAN_F1L,OBJ_HIDE,2 : setobjmode DAN_F1R,OBJ_HIDE,2
-			setobjmode DAN_F2L,OBJ_HIDE,2 : setobjmode DAN_F2R,OBJ_HIDE,2
-		}
-	}
-	return
-
-//--------危険場面のダミーの描画とか--------------------------------------------
-*draw_not_danger
-	if(" "=keikoku)&(" "=non_danger_state)&(catch_trial = 1) : target_time = time: keikoku = "警告"
-	if(target_time + iSOA(nSOA) < time): return
-	if(ctflag=0): nSOA++: ctflag=1
 	
-	;ダミー‐右
-	if("右"=non_danger_type){
-		if(" "=non_danger_state) : non_danger_state="ダミー出現" :gosub *abc_d : setpos NON_DAN_R,-20,0,player_pos_z+500
-		getpos NON_DAN_R,n_danger_x,n_danger_y,n_danger_z
-		if("ダミー出現"=non_danger_state)&(n_danger_z<=player_pos_z){
-			non_danger_state="ダミー通過" : non_danger_type=" " : non_danger=" " :gosub *abc_d: ctflag=0
+		;時速→速度用変数
+		if(car_sokudo ! car_sokudo2){
+			car_speed =  0.2777778 * double(car_sokudo) * 0.015 * 6.0			;速度用変数を時速から算出
+			car_sokudo2 = car_sokudo
 		}
+		;先行車の挙動を確定
+		if(elasped_time >= time_set + adjust_range) : v_set = 0 : time_set = time_set + adjust_range
+		if(CAR_pos_z-camera_pos_z)<LIM_SHAKAN_MAX and (CAR_pos_z-camera_pos_z)>LIM_SHAKAN_MIN : CAR_pos_z = CAR_pos_z2+car_speed
+		if(CAR_pos_z-camera_pos_z)>LIM_SHAKAN_MAX : CAR_pos_z=camera_pos_z+LIM_SHAKAN_MAX-7			;305の理由は310に近すぎると挙動が…
+		if(CAR_pos_z-camera_pos_z)<LIM_SHAKAN_MIN : CAR_pos_z=camera_pos_z+LIM_SHAKAN_MIN+7			;55の理由は50に近すぎると挙動が…
 	}
-	;ダミー‐左
-	if("左"=non_danger_type){
-		if(" "=non_danger_state) : non_danger_state="ダミー出現" :gosub *abc_d : setpos NON_DAN_L,20,0,player_pos_z+500
-		getpos NON_DAN_L,n_danger_x,n_danger_y,n_danger_z
-		if("ダミー出現"=non_danger_state)&(n_danger_z<=player_pos_z){
-			non_danger_state="ダミー通過" : non_danger_type=" " : non_danger=" " :gosub *abc_d: ctflag=0
-		}
+	setpos Leading_CAR,0,0,CAR_pos_z
+	CAR_pos_z2=CAR_pos_z
+	
+	if (CAR_pos_z-camera_pos_z)<=SHAKAN_MIN : color 255,0,0 : syakan=1
+	if (CAR_pos_z-camera_pos_z)>=SHAKAN_MAX : color 0,0,255 : syakan=2
+	if (CAR_pos_z-camera_pos_z)>SHAKAN_MIN && (CAR_pos_z-camera_pos_z)<SHAKAN_MAX : color 0,255,0 : syakan=0
+
+	
+	;----右車線の車----
+	addpos R_CAR,0.0,0.0,R_CAR_S 					;右車線の車は110km/hで走行？
+	getpos R_CAR,r_car_x,r_car_y,r_car_z					;右車線の車の座標を取得
+	;見えなくなった車を後方へ設置
+	if(r_car_z >= camera_pos_z+780){
+		setpos R_CAR, -22, 0, camera_pos_z-100		;自身の座標から100座標後ろに設置
 	}
-	;ダミー‐前
-	if("前"=non_danger_type){
-		if(" "=non_danger_state){
-			non_danger_state="ダミー出現" :gosub *abc_d
-			setobjmode NON_DAN_F1,OBJ_STATIC,2 : setobjmode NON_DAN_F2,OBJ_STATIC,2
-			setpos NON_DAN_F1,-10,0,player_pos_z + 600 : setpos NON_DAN_F2,10,0,player_pos_z + 600
-		}
-		getpos NON_DAN_F1,n_danger_x,n_danger_y,n_danger_z
-		if("ダミー出現"=non_danger_state)&(n_danger_z<=player_pos_z){
-			non_danger_state="ダミー通過" : non_danger_type=" " : non_danger=" " :gosub *abc_d
-			setobjmode NON_DAN_F1,OBJ_HIDE,2 : setobjmode NON_DAN_F2,OBJ_HIDE,2
-		}
+	//if(r_car_z < camera_pos_z-30){
+		//setpos R_CAR, -22, 0, camera_pos_z+500+20*rnd(4)		;自身の座標から500～650座標後ろに設置
+	//}
+	
+	;----左車線の車----
+	addpos L_CAR,0.0,0.0,L_CAR_S 					;左車線の車は100km/hで走行？
+	getpos L_CAR,l_car_x,l_car_y,l_car_z					;左車線の車の座標を取得
+	;見えなくなった車を後方へ設置
+	if(l_car_z >= camera_pos_z+500){
+		setpos L_CAR, 22, 0, camera_pos_z-100		;自身の座標から100座標後ろに設置
 	}
-	;ダミー‐右前
-	if("右前"=non_danger_type){
-		if(" "=non_danger_state){
-			non_danger_state="ダミー出現" :gosub *abc_d
-			setobjmode NON_DAN_R_F,OBJ_STATIC,2
-			setpos NON_DAN_R_F,-28,0,player_pos_z + 600
-		}
-		getpos NON_DAN_R_F,n_danger_x,n_danger_y,n_danger_z
-		if("ダミー出現"=non_danger_state)&(n_danger_z<=player_pos_z){
-			non_danger_state="ダミー通過" : non_danger_type=" " : non_danger=" " :gosub *abc_d
-			setobjmode NON_DAN_R_F,OBJ_HIDE,2
-		}
+	//if(l_car_z < camera_pos_z-30){
+		//setpos L_CAR, 22, 0, camera_pos_z+500+20*rnd(4)		;自身の座標から500～650座標前に設置
+	//}
+	
+return
+
+
+//--------フレーム描画為ののサブルーチン---------------------------------------
+*alldraw
+
+	hgdraw 0
+	
+	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
+	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
+	
+	;----経過時間の取得----
+	;起動時からの経過時間[ms]
+	hggettime time,0		;hgini命令を通過してからの経過時間を 1ms 単位で取得	 ※ただし、上限は100000 msまで,それを超えると0 msから数え直す
+	hggettime count,1		;上限である100000 msを超えた回数の取得
+	time = count*100000+time-push_time	;現在の経過時間の算出
+	;実験経過時間[s]&[min]
+	if st_ex = 1 : elasped_time = (time - start_time)/1000				;総実験経過時間[sec]　=　(time_m)*60 ＋ (time_s)秒
+	time_m = elasped_time/60							;実験経過時間[min単位]
+	time_s = elasped_time\60							;実験経過時間[sec単位]
+	
+	;----カウントダウン----
+	;200座標を過ぎたら10カウントしたら実験開始
+	if (camera_pos_z > 200) && (cnt_n = 0){
+		cnt_n = 15							;カウント回数=10
+		sp_time = time						;スタート地点（z=200）を過ぎた時間
 	}
-	;ダミー‐左前
-	if("左前"=non_danger_type){
-		if(" "=non_danger_state){
-			non_danger_state="ダミー出現" :gosub *abc_d
-			setobjmode NON_DAN_L_F,OBJ_STATIC,2
-			setpos NON_DAN_L_F,28,0,player_pos_z + 600
-		}
-		getpos NON_DAN_L_F,n_danger_x,n_danger_y,n_danger_z
-		if("ダミー出現"=non_danger_state)&(n_danger_z<=player_pos_z){
-			non_danger_state="ダミー通過" : non_danger_type=" " : non_danger=" " :gosub *abc_d
-			setobjmode NON_DAN_L_F,OBJ_HIDE,2
-		}
+	pos sign_xpos, sign_ypos : gmode 3,264,181,255
+	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 15) : hgrotate sec_ago15,0,0,0, sign_xsize, sign_ysize	;⑩
+	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 3) : hgrotate sec_ago3,0,0,0, sign_xsize, sign_ysize		;③
+	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 2) : hgrotate sec_ago2,0,0,0, sign_xsize, sign_ysize		;②
+	if (camera_pos_z > 200) &&  ((time - sp_time)/1000) = (cnt_n - 1) : hgrotate sec_ago1,0,0,0, sign_xsize, sign_ysize		;①
+	if (camera_pos_z > 200) && ((time - sp_time)/1000) = cnt_n{
+		hgrotate ready_go,0,0,0, sign_xsize, sign_ysize																		;Go!	
+		if st_ex = 0 : start_time = time : st_ex = 1
 	}
-	;ダミー‐左後
-	if("左後"=non_danger_type){
-		if(" "=non_danger_state){
-			non_danger_state="ダミー出現" :gosub *abc_d
-			setpos NON_DAN_F1,5,0,player_pos_z + 600 
-		}
-		getpos NON_DAN_F1,n_danger_x,n_danger_y,n_danger_z
-		if("ダミー出現"=non_danger_state)&(n_danger_z<=player_pos_z){
-			non_danger_state="ダミー通過" : non_danger_type=" " : non_danger=" " :gosub *abc_d
-		}
-	}
-	;ダミー‐右後
-	if("右後"=non_danger_type){
-		if(" "=non_danger_state){
-			non_danger_state="ダミー出現" :gosub *abc_d
-			setpos NON_DAN_F1,5,0,player_pos_z + 600 
-		}
-		getpos NON_DAN_F1,n_danger_x,n_danger_y,n_danger_z
-		if("ダミー出現"=non_danger_state)&(n_danger_z<=player_pos_z){
-			non_danger_state="ダミー通過" : non_danger_type=" " : non_danger=" " :gosub *abc_d
-		}
-	}
-	;ダミー‐後ろ
-	if("後ろ"=non_danger_type){
-		if(" "=non_danger_state){
-			non_danger_state="ダミー出現" :gosub *abc_d
-			setpos NON_DAN_F1,5,0,player_pos_z + 600 
-		}
-		getpos NON_DAN_F1,n_danger_x,n_danger_y,n_danger_z
-		if("ダミー出現"=non_danger_state)&(n_danger_z<=player_pos_z){
-			non_danger_state="ダミー通過" : non_danger_type=" " : non_danger=" " :gosub *abc_d
-		}
-	}
-	return
-//--------サンプリングタイム毎にデータを保存------------------------------------
-*abc
+	
+	;----車間距離判定----
+	//gmode 3,100,100,75
+	//hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y-BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;上
+	//hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y+BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;下
+	//hgrect BLUE_FRAME_CENTER_X-BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT						;左
+	//hgrect BLUE_FRAME_CENTER_X+BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT
+	
+	;------確認用フィードバック----------------
+	fprt "jisoku: "+int(jisoku2)+"km/h",8,70								;自車の時速[km/h]
+	;fprt "elapsed_time:"+elasped_time,8,90									;実験開始からの経過時間[sec]
+	;fprt "nemuketi:"+nemuketi,8,110										;眠気の状態
+	fprt "time:"+time_m+" min "+time_s+" sec",8,130							;経過時間を分・秒で表示
+	;fprt "s_time:"+s_time,8,150											;サンプリング回数
+	;fprt "camera_ang_y: "+camera_ang_y,8,190								;車の傾き(方向･角度）
+	fprt "camera_pos_x: "+camera_pos_x,8,210								;車の走行距離(座標）
+	;fprt "car_speed: "+car_speed,8,230										;先行車の１フレームでの座標移動距離
+	fprt "lead_car_speed: "+car_sokudo+"km/h",8,250							;先行車の時速[km/h]
+	;fprt "time_set: "+time_set+"",8,270									;現在の先行車の時速をセットした変更した時間
+	;fprt "syakan: "+syakan,8,290											;車間距離の状態「指定範囲内かどうか」
+	;fprt "CAR_pos_z-camera_pos_z: "+(CAR_pos_z-camera_pos_z)+"",8,310		;先行車との車間距離
+	
+	hgview 20,0,320,240
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	hgview 350,0,320,240
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	hgview 680,0,320,240
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	//フロントカメラの設定
+	setpos HGOBJ_CAMERA, player_pos_x, player_pos_y-5, player_pos_z-30	; カメラ位置設定
+	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
+	
+	frame++				;フレーム回数カウント用変数
+	hgsync 14	;時間待ち（処理が速くなり過ぎないように）
+	
+return
+
+//*************************
+*sampling_data
 	notesel save_data
-	noteadd ""+time+","+jisoku+","+player_pos_z+","+player_pos_x+","+lane+","+deviation+","+danger+non_danger+","+brake+","+keikoku,s_time,1
-	if("回避成功"=judge)|("回避失敗"=judge) : judge=" "
-	if("間違えて反応"=judge)|("間違えて反応 & 左車線に移動"=judge)|("間違えて反応 & 右車線に移動"=judge)|("反応なし"=judge) : judge=" "
+	noteadd ""+s_time+","+time+","+elasped_time+","+camera_pos_z+","+camera_pos_x+","+nemuketi+","+b_state+","+syakan+","+(CAR_pos_z - camera_pos_z)+","+car_sokudo+","+pedal+","+pedal_per ,s_time,1
 	s_time++
-	return
-//--------ターゲットの出現などを記録--------------------------------------------
-*abc_d
-	notesel save_data
-	noteadd ""+time+","+jisoku+","+player_pos_z+","+player_pos_x+","+lane+","+deviation+","+danger+non_danger+","+brake+","+keikoku+","+non_danger_state,s_time,1
-	if("警告"=keikoku): keikoku=" "
-	if("ターゲット通過"=danger_state) : danger_state=" "
-	if("ダミー通過"=non_danger_state) : non_danger_state=" " : catch_trial = 0
-	if("回避成功"=judge)|("回避失敗"=judge) : judge=" "
-	if("間違えて反応"=judge)|("間違えて反応 & 左車線に移動"=judge)|("間違えて反応 & 右車線に移動"=judge)|("反応なし"=judge) : judge=" "
-	s_time++
-	return
-//--------終了前の操作----------------------------------------------------------
+return
+	
+	////////////////////////////////終了前の操作////////////////////////////////
 *exit
-	uio_out 0, 255
-	notesel save_data
-	noteadd "time(ms),時速(km/h),z,走行位置,走行車線,逸脱判定,危険場面+危険以外,ブレーキ判定,警告提示"
-	
-	dialog "*",17,"テキストファイル"	;保存用のダイアログを別ウインドウで表示
-	if stat=1 : notesave refstr+"_トラッキング.txt"	;ファイル名を記載した場合、その名前のテキストファイル作成
 	end		;onexitで割り込み処理をする場合、endを書かなければウインドウを閉じれなくなるので注意
-
-
-
-
-
-//--------危険場面の判定--------------------------------------------------------
-*danger_decision
-	;危険場面－右 or 左
-	if("右"=danger_type)|("左"=danger_type){
-		if (data.3>=(32511+20593.6)){
-			judge = "回避成功"
-		}
-		else {
-			judge = "回避失敗"
-		}
-	}
-	;危険場面－前 or 左前 or 左後
-	if("前"=danger_type)|("左前"=danger_type)|("左後"=danger_type){
-		if (player_pos_x<=-16){
-			judge = "回避成功"
-		}
-		else {
-			judge = "回避失敗"
-		}
-	}
-	;危険場面－後ろ or 右前 or 右後
-	if("後ろ"=danger_type)|("右前"=danger_type)|("右後"=danger_type){
-		if (player_pos_x>=16){
-			judge = "回避成功"
-		}
-		else {
-			judge = "回避失敗"
-		}
-	}
-	return
-//--------ダミーの判定--------------------------------------------------------
-*non_danger_decision
-	;ダミー：右 or 左
-	if("右"=non_danger_type)|("左"=non_danger_type){
-		if(data.3>=(32511+20593.6)){
-			judge = "間違えて反応"
-		}
-		if(data.3>=(32511+5148.4)){
-			judge = "間違えて反応"
-		}
-		else{
-			judge = "反応なし"
-		}
-	}
-	;ダミー：前
-	if("前"=non_danger_type){
-		if (player_pos_x<=-16){
-			judge = "間違えて反応"
-		}
-		if (player_pos_x>=16){
-			judge = "間違えて反応 & 左車線に移動"
-		}
-		if (4.2<=player_pos_x<16)&&(-16<player_pos_x<=-4.2){
-			judge = "コーンに接触"
-		}
-		else {
-			judge = "反応なし"
-		}
-	}
-	;ダミー：左前 or 左後
-	if("左前"=non_danger_type)|("左後"=non_danger_type){
-		if(player_pos_x<=-16){
-			judge = "間違えて反応"
-		}
-		if(player_pos_x>=16){
-			judge = "間違えて反応 & 左車線に移動"
-		}
-		else{
-			judge = "反応なし"
-		}
-	}
-	;ダミー：後ろ or 右前 or 右後
-	if("後ろ"=non_danger_type)|("右前"=non_danger_type)|("右後"=non_danger_type){
-		if(player_pos_x>=16){
-			judge = "間違えて反応"
-		}
-		if(player_pos_x<=-16){
-			judge = "間違えて反応 & 右車線に移動"
-		}
-		else{
-			judge = "反応なし"
-		}
-	}
-	return
+	

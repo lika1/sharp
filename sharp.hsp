@@ -6,9 +6,6 @@
 	//すべての変数や関数はここで定義をしておきます、モデルもここで読み込みます。
 	////////////////////////////////////////////
 	screen 0,1024,768,0,0,0  ;フロント画面の作成
-	screen 1,800,768,0,0,0	 ;左サイドミラー画面の作成
-	screen 2,600,768,0,0,0	 ;右サイドミラー画面の作成
-	screen 3,400,768,0,0,0	 ;バックミラー画面の作成
 	
 	randomize				;乱数の初期化
 	onexit	*exit	;プログラム終了時の割り込み処理（×ボタンを押すとそこ（指定ラベル）に飛ぶ）
@@ -41,6 +38,9 @@
 	st_ex = 0
 	time_m = 0.0 : time_s = 0.0
 	time_set = 0.0
+	
+	player_pos_x == 0 : player_pos_y == 0 : player_pos_z == 0	;カメラの位置
+	player_ang_x == 0 : player_ang_y == 0 : player_ang_z == 0	;カメラの向き　
 
 	camera_pos_x == 0 : camera_pos_y == 0 : camera_pos_z == 0	;カメラの位置
 	camera_ang_x == 0 : camera_ang_y == 0 : camera_ang_z == 0	;カメラの向き　　
@@ -180,10 +180,14 @@
 	arrowTex = readTex("pic/矢印3.bmp")	
 	regobj player,yajirushi_model
 	setang player,-M_PI/2,M_PI,0		;矢印の向き???
-
-    cammode CAM_MODE_AUTOMOVE,player
+	
+	;カメラの準備
+	cammode CAM_MODE_NORMAL				;カメラモードの設定
+	setpos HGOBJ_CAMERA, 0,-5,-30	;カメラ位置の設定
+	setang HGOBJ_CAMERA,0,deg2rad(180),0	;カメラの向きの設定
+    //cammode CAM_MODE_AUTOMOVE,player
     setwork HGOBJ_CAMERA, 35, M_PI, -5		;カメラの視点,前後,周囲,高さ
-    setdir HGOBJ_CAMERA,0,-8,0			;セット位置（角度）？横,高さ,前後
+    //setdir HGOBJ_CAMERA,0,-8,0			;セット位置（角度）？横,高さ,前後
 
 	;ライトの準備
 	setang HGOBJ_LIGHT,4.9,M_PI,0		;ライトの向きの設定
@@ -347,7 +351,7 @@
 		if(left_car_speed ! set_data(10))  : button_flag = 1 : flag = 10
 		if(right_car_speed ! set_data(11)) : button_flag = 1 : flag = 11
 	}
-	if(button_flag =1) : objenable 13,1 : objenable 14,0
+	if(button_flag =1) : objenable 12,1 : objenable 13,0
 	
 	wait 2
 	goto *set_up
@@ -408,7 +412,7 @@
 	;カウントダウン番号，眠気評価の画像の大きさ・座標用変数
 	sign_xsize = int(0.3868 * win_xsize)			;画像の大きさ(X座標）
 	sign_ysize = int(0.3529 * win_ysize)			;画像の大きさ(Y座標）
-	sign_xpos  = win_xsize/2						;画像の座標(X座標）
+	sign_xpos  = (win_xsize - sign_xsize)/2		;画像の座標(X座標）
 	sign_ypos  = int(0.326 * win_ysize)			;画像の座標(Y座標）
 	;眠気評価用の大きさ・座標用変数
 	nemuke_xsize = int(0.625 * win_xsize)			;画像の大きさ(X座標）
@@ -427,6 +431,15 @@
 	repeat
 		hgdraw
 	
+		getpos HGOBJ_CAMERA,camera_pos_x,camera_pos_y,camera_pos_z	;カメラの位置(座標)を取得
+		getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	
+		getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
+		getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
+	
+		title "pos(c/p)   x:"+ camera_pos_x+"/"+player_pos_x +"   y:"+ camera_pos_y+"/"+player_pos_y +"  z:"+camera_pos_z+"/"+player_pos_z +"     angle(c/p)   x:"+ camera_ang_x+"/"+player_ang_x +"   y:"+ camera_ang_y+"/"+player_ang_y+"  z:"+camera_ang_z+"/"+player_ang_z
+
+		
 		hggettime time,0					;hgini命令を通過してからの経過時間を 1ms 単位で取得	 ※ただし、上限は100000 msまで,それを超えると0 msから数え直す
 		hggettime count,1					;上限である100000 msを超えた回数の取得
 		time = count*100000+time			;現在の経過時間の算出
@@ -441,9 +454,14 @@
 *main	
 	kyori1 = camera_pos_z 
 	
-	getpos player,camera_pos_x,camera_pos_y,camera_pos_z	;カメラの位置(座標)を取得
-	getang player,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
-
+	getpos HGOBJ_CAMERA,camera_pos_x,camera_pos_y,camera_pos_z	;カメラの位置(座標)を取得
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	
+	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
+	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
+	
+	title "pos(c/p)   x:"+ camera_pos_x+"/"+player_pos_x +"   y:"+ camera_pos_y+"/"+player_pos_y +"  z:"+camera_pos_z+"/"+player_pos_z +"     angle(c/p)   x:"+ camera_ang_x+"/"+player_ang_x +"   y:"+ camera_ang_y+"/"+player_ang_y+"  z:"+camera_ang_z+"/"+player_ang_z
+	
 	kyori2 = camera_pos_z
 
 	;--------サブルーチンジャンプ---------------------------------------------------------------------------------
@@ -633,22 +651,22 @@ return
 	getpos R_CAR,r_car_x,r_car_y,r_car_z					;右車線の車の座標を取得
 	;見えなくなった車を後方へ設置
 	if(r_car_z >= camera_pos_z+780){
-		setpos R_CAR, -22, 0, camera_pos_z-10		;自身の座標から10座標後ろに設置
+		setpos R_CAR, -22, 0, camera_pos_z-100		;自身の座標から100座標後ろに設置
 	}
-	if(r_car_z < camera_pos_z-30){
-		setpos R_CAR, -22, 0, camera_pos_z+500+20*rnd(4)		;自身の座標から500～650座標後ろに設置
-	}
+	//if(r_car_z < camera_pos_z-30){
+		//setpos R_CAR, -22, 0, camera_pos_z+500+20*rnd(4)		;自身の座標から500～650座標後ろに設置
+	//}
 	
 	;----左車線の車----
 	addpos L_CAR,0.0,0.0,L_CAR_S 					;左車線の車は100km/hで走行？
 	getpos L_CAR,l_car_x,l_car_y,l_car_z					;左車線の車の座標を取得
 	;見えなくなった車を後方へ設置
 	if(l_car_z >= camera_pos_z+500){
-		setpos L_CAR, 22, 0, camera_pos_z-10		;自身の座標から10座標後ろに設置
+		setpos L_CAR, 22, 0, camera_pos_z-100		;自身の座標から100座標後ろに設置
 	}
-	if(l_car_z < camera_pos_z-30){
-		setpos L_CAR, 22, 0, camera_pos_z+500+20*rnd(4)		;自身の座標から500～650座標前に設置
-	}
+	//if(l_car_z < camera_pos_z-30){
+		//setpos L_CAR, 22, 0, camera_pos_z+500+20*rnd(4)		;自身の座標から500～650座標前に設置
+	//}
 	
 return
 
@@ -656,7 +674,10 @@ return
 //--------フレーム描画為ののサブルーチン---------------------------------------
 *alldraw
 
-	hgdraw
+	hgdraw 0
+	
+	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
+	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
 	
 	;----経過時間の取得----
 	;起動時からの経過時間[ms]
@@ -670,7 +691,6 @@ return
 	
 	;----カウントダウン----
 	;200座標を過ぎたら10カウントしたら実験開始
-	title "camera_pos_z："+camera_pos_z
 	if (camera_pos_z > 200) && (cnt_n = 0){
 		cnt_n = 15							;カウント回数=10
 		sp_time = time						;スタート地点（z=200）を過ぎた時間
@@ -686,11 +706,11 @@ return
 	}
 	
 	;----車間距離判定----
-	gmode 3,100,100,75
-	hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y-BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;上
-	hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y+BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;下
-	hgrect BLUE_FRAME_CENTER_X-BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT						;左
-	hgrect BLUE_FRAME_CENTER_X+BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT
+	//gmode 3,100,100,75
+	//hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y-BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;上
+	//hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y+BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;下
+	//hgrect BLUE_FRAME_CENTER_X-BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT						;左
+	//hgrect BLUE_FRAME_CENTER_X+BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT
 	
 	;------確認用フィードバック----------------
 	fprt "jisoku: "+int(jisoku2)+"km/h",8,70								;自車の時速[km/h]
@@ -706,9 +726,29 @@ return
 	;fprt "syakan: "+syakan,8,290											;車間距離の状態「指定範囲内かどうか」
 	;fprt "CAR_pos_z-camera_pos_z: "+(CAR_pos_z-camera_pos_z)+"",8,310		;先行車との車間距離
 	
+	hgview 20,0,320,240
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	hgview 350,0,320,240
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	hgview 680,0,320,240
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	//フロントカメラの設定
+	setpos HGOBJ_CAMERA, player_pos_x, player_pos_y-5, player_pos_z-30	; カメラ位置設定
+	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
 	
 	frame++				;フレーム回数カウント用変数
-	
 	hgsync 14	;時間待ち（処理が速くなり過ぎないように）
 	
 return

@@ -5,17 +5,43 @@
 	//定義区
 	//すべての変数や関数はここで定義をしておきます、モデルもここで読み込みます。
 	////////////////////////////////////////////
-	screen 0,1024,768,0,0,0  ;フロント画面の作成
-	
 	randomize				;乱数の初期化
 	onexit	*exit	;プログラム終了時の割り込み処理（×ボタンを押すとそこ（指定ラベル）に飛ぶ）
 	
-	gsel 0,1				;フロント画面アクティブ
-	color : boxf			;画面全体を黒く塗りつぶして，上部で書かれた文字を消去
-	font msgothic,int(0.0652 * win_ysize)
-	pos (win_xsize/2 - int(0.163 * win_xsize)),(win_ysize/2 - int(0.0326 * win_ysize)) : color 255,255,255 : print "NOW LODING"
-	
 	////////////////////////////////変数の定義////////////////////////////////
+	;テキストからデータを読み込む
+	setting_data = ""
+	notesel setting_data					;設定情報を保存するメモリノートパッド命令のバッファ名
+	noteload "config/setting_new_data.txt"	;「setting_data」という変数に「setting_new_data.txt」の中身をロードする
+	
+	ddim set_data,12						;テキストから抜き出したデータを一時的に保管したりする変数を定義
+	repeat									;（始）テキストデータから設定情報を取り出すループ（始）
+		noteget set_data(cnt), cnt			;1行ずつデータを取り出し，一時的に保管する為の変数 set_dataに代入
+		if(set_data(cnt) = "") : break		;データが終わったらループを抜け出す
+	loop									;（終）テキストデータから設定情報を取り出すループ（終）
+	
+	;テキストから読み取った内容をそれぞれ変数に格納する
+	win_xsize       = int(set_data(0))		;画面サイズ（x）
+	win_ysize       = int(set_data(1))		;画面サイズ（y）
+	lead_car_speed1 = set_data(2)			;先行車の速度（最低速度）
+	lead_car_speed2 = set_data(3)			;先行車の速度（最高速度）
+	change_speed    = set_data(4)			;先行車の速度変化の段階数
+	adjust_range    = set_data(5)			;先行車の速度調整間隔時間
+	limit_min_range = set_data(6)			;先行車との挙動限界距離（最短）
+	limit_max_range = set_data(7)			;先行車との挙動限界距離（最長）
+	min_range       = set_data(8)			;先行車との適正距離（最短）
+	max_range       = set_data(9)			;先行車との適正距離（最長）
+	left_car_speed  = set_data(10)			;左車線を走行している車の時速
+	right_car_speed = set_data(11)			;右車線を走行している車の時速
+	
+	
+	click_default = 0						;設定画面のデフォルトボタンをクリックしましたか（0はしなかった、1はした）
+	
+	screen 0,(win_xsize),(win_ysize),0,0,0  					;フロント画面の作成
+	
+	gsel 0,1				;フロント画面アクティブ
+	color : boxf					;画面全体を黒く塗りつぶす
+	
 	;配列
 	dim ROAD,3											;道路
     dim HODOU_LEFT,20									;左側　歩道
@@ -202,18 +228,96 @@
 	
 	////////////////////////////////先に設定画面////////////////////////////////
 *re_set
+	gsel 0,1						;フロント画面アクティブ
+	color : boxf					;画面全体を黒く塗りつぶす
+	clrobj							;すべてのオブジェクトを削除する
+	
+	objmode 2, 1 							;この命令によりオブジェクト内のフォント調整がfont命令で，できるようなる
+
+	font_size = int(double(win_ysize) * 0.04558)	;フォントサイズを画面の大きさから設定
+	color 255,255,255 : font msgothic,font_size
+	;先行車の速度幅（km/h ～ km/h）
+	pos (font_size),(3.5 * font_size)      : mes "先行車の速度幅"
+	pos (font_size * 13),(3.5 * font_size) : input lead_car_speed1,(font_size * 2),(font_size),3;0
+	pos (font_size * 15),(3.5 * font_size) : mes " km/h～"
+	pos (font_size * 19),(3.5 * font_size) : input lead_car_speed2,(font_size * 2),(font_size),3;1
+	pos (font_size * 21),(3.5 * font_size) : mes " km/h"
+	;先行車の速度変化段階数（段階）
+	pos (font_size),(5.5 * font_size)      : mes "先行車の速度変化段階数"
+	pos (font_size * 14),(5.5 * font_size) : input change_speed,(font_size),(font_size),2;2
+	pos (font_size * 15),(5.5 * font_size) : mes " 段階"
+	;先行車の速度調整間隔（秒）
+	pos (font_size),(7.5 * font_size)      : mes "先行車の速度調整間隔"
+	pos (font_size * 14),(7.5 * font_size) : input adjust_range,(2 * font_size),(font_size),3;3
+	pos (font_size * 16),(7.5 * font_size) : mes " 秒"
+	;先行車の挙動範囲（ｍ）
+	pos (font_size),(9.5 * font_size)      : mes "先行車の挙動範囲"
+	pos (font_size * 13),(9.5 * font_size) : input limit_min_range,(font_size * 3),(font_size),4;4
+	pos (font_size * 16),(9.5 * font_size) : mes " m～"
+	pos (font_size * 19),(9.5 * font_size) : input limit_max_range,(font_size * 3),(font_size),4 ;5
+	pos (font_size * 22),(9.5 * font_size) : mes " m"
+	;先行車との適正距離（ｍ）
+	pos (font_size),(11.5 * font_size)      : mes "追従作業の適正距離"
+	pos (font_size * 13),(11.5 * font_size) : input min_range,(font_size * 3),(font_size),4;6
+	pos (font_size * 16),(11.5 * font_size) : mes " m～"
+	pos (font_size * 19),(11.5 * font_size) : input max_range,(font_size * 3),(font_size),4 ;7
+	pos (font_size * 22),(11.5 * font_size) : mes " m"
+	;左車線の車の時速（㎞/h）
+	pos (font_size),(13.5 * font_size)      : mes "左車線の車の速度"
+	pos (font_size * 13),(13.5 * font_size) : input left_car_speed,(font_size * 2),(font_size),3;8
+	pos (font_size * 15),(13.5 * font_size) : mes " km/h"
+	;右車線の車の時速（㎞/h）
+	pos (font_size),(15.5 * font_size) : mes "右車線の車の速度"
+	pos (font_size * 13),(15.5 * font_size) : input right_car_speed,(font_size * 2),(font_size),3;9
+	pos (font_size * 15),(15.5 * font_size) : mes " km/h"
+	;ボタンの設置
+	objsize (double(win_xsize)*0.25),(double(win_ysize)*0.08),100					;オブジェクトサイズ変更
+	pos (double(win_xsize)*0.05),(win_ysize - font_size*4)  : button goto "デフォルト", *default_set;10
+	pos (double(win_xsize)*0.375),(win_ysize - font_size*4) : button goto "設定を保存", *save_set_data;11
+	pos (double(win_xsize)*0.7),(win_ysize - font_size*4) : button goto "実験開始", *start_ex;12
+	
+	;---------設定画面の待ちループ--------------------------------------------
+*set_up
+	
+	button_flag = 0			;前の項目の値が修正されない場合にこのフラグが0、修正された場合は1
+	
+	if(win_xsize ! set_data(0))        : button_flag = 1 
+	if(win_ysize ! set_data(1))        : button_flag = 1
+	if(lead_car_speed1 ! set_data(2))  : button_flag = 1 
+	if(lead_car_speed2 ! set_data(3))  : button_flag = 1
+	if(change_speed ! set_data(4))     : button_flag = 1
+	if(adjust_range ! set_data(5))     : button_flag = 1 
+	if(limit_min_range ! set_data(6))  : button_flag = 1 
+	if(limit_max_range ! set_data(7))  : button_flag = 1 
+	if(min_range ! set_data(8)) 	   : button_flag = 1 
+	if(max_range ! set_data(9))	       : button_flag = 1
+	if(left_car_speed ! set_data(10))  : button_flag = 1 
+	if(right_car_speed ! set_data(11)) : button_flag = 1
+	if(click_default = 1) : button_flag = 1
+	
+	if(button_flag == 0){	;修正された項目がない場合に、"設定を保存"が使えない、"実験開始"が使えるように
+		objenable 11,0 : objenable 12,1
+	} else {				;修正された項目がある場合に、"設定を保存"が使える、"実験開始"が使えるないように
+		objenable 11,1 : objenable 12,0
+	}
+	
+	title "button_flag"+button_flag+"  click_default"+click_default
+	wait 2
+	goto *set_up
+	
+	;---------デフォルト設定を読み込むサブルーチン--------------------------------------------
+*default_set
+	
+	click_default = 1						;デフォルトボタンをクリックしたことを記録
+	
 	setting_data = ""
 	notesel setting_data					;設定情報を保存するメモリノートパッド命令のバッファ名
-	noteload "config/setting_new_data.txt"			;「setting_data」という変数に「setting_new_data.txt」の中身をロードする
+	noteload "config/default_data.txt"			;「setting_data」という変数にdefault_data.txtの中身をロードする
 	
-	gsel 0,1				;フロント画面アクティブ
-	boxf					;画面全体を黒く塗りつぶす
-	
-	ddim set_data,12						;テキストから抜き出したデータを一時的に保管したりする変数を定義
 	repeat									;（始）テキストデータから設定情報を取り出すループ（始）
 		noteget set_data(cnt), cnt			;1行ずつデータを取り出し，一時的に保管する為の変数 set_dataに代入
 		if(set_data(cnt) = "") : break		;データが終わったらループを抜け出す
-	loop									;（終）テキストデータから設定情報を取り出すループ（終）
+	loop
 	
 	;テキストから読み取った内容をそれぞれ変数に格納する
 	win_xsize       = int(set_data(0))		;画面サイズ（x）
@@ -229,165 +333,36 @@
 	left_car_speed  = set_data(10)			;左車線を走行している車の時速
 	right_car_speed = set_data(11)			;右車線を走行している車の時速
 	
-	screen 0,(win_xsize),(win_ysize),0,0,0  					;フロント画面の作成
-	if(win_xsize = 800)&&(win_ysize = 600)   : win_size = 0		;画面の規定サイズ１
-	if(win_xsize = 1024)&&(win_ysize = 768)  : win_size = 1		;画面の規定サイズ２
-	if(win_xsize = 1280)&&(win_ysize = 720)  : win_size = 2		;画面の規定サイズ３
-	if(win_xsize = 1280)&&(win_ysize = 768)  : win_size = 3		;画面の規定サイズ４
-	if(win_xsize = 1360)&&(win_ysize = 768)  : win_size = 4		;画面の規定サイズ５
-	if(win_xsize = 1366)&&(win_ysize = 768)  : win_size = 5		;画面の規定サイズ６
-	if(win_xsize = 1400)&&(win_ysize = 1050) : win_size = 6		;画面の規定サイズ７
-	if(win_xsize = 1920)&&(win_ysize = 1080) : win_size = 7		;画面の規定サイズ８
-	win_size2 = win_size
-	boxf
-	
-	objmode 2, 1 							;この命令によりオブジェクト内のフォント調整がfont命令で，できるようなる
-
-	font_size = int(double(win_ysize) * 0.04558)	;フォントサイズを画面の大きさから設定
-	color 255,255,255 : font msgothic,font_size
-	;画面サイズ（ウインドウサイズに合わせて位置，大きさを自動調整）
-	pos (font_size),(1.5 * font_size)      : mes "画面サイズ"
-	objsize (double(win_xsize)*0.25),(double(win_ysize)*0.05),100		;オブジェクトサイズ変更
-	pos (font_size * 13),(1.5 * font_size) : combox win_size,100,"800×600\n1024×768\n1280×720\n1280×768\n1360×768\n1366×768\n1400×1050\n1920×1050";①
-	;先行車の速度幅（km/h ～ km/h）
-	pos (font_size),(3.5 * font_size)      : mes "先行車の速度幅"
-	pos (font_size * 13),(3.5 * font_size) : input lead_car_speed1,(font_size * 2),(font_size),3;②
-	pos (font_size * 15),(3.5 * font_size) : mes " km/h～"
-	pos (font_size * 19),(3.5 * font_size) : input lead_car_speed2,(font_size * 2),(font_size),3;③
-	pos (font_size * 21),(3.5 * font_size) : mes " km/h"
-	;先行車の速度変化段階数（段階）
-	pos (font_size),(5.5 * font_size)      : mes "先行車の速度変化段階数"
-	pos (font_size * 14),(5.5 * font_size) : input change_speed,(font_size),(font_size),2;④
-	pos (font_size * 15),(5.5 * font_size) : mes " 段階"
-	;先行車の速度調整間隔（秒）
-	pos (font_size),(7.5 * font_size)      : mes "先行車の速度調整間隔"
-	pos (font_size * 14),(7.5 * font_size) : input adjust_range,(2 * font_size),(font_size),3;⑤
-	pos (font_size * 16),(7.5 * font_size) : mes " 秒"
-	;先行車の挙動範囲（ｍ）
-	pos (font_size),(9.5 * font_size)      : mes "先行車の挙動範囲"
-	pos (font_size * 13),(9.5 * font_size) : input limit_min_range,(font_size * 3),(font_size),4;⑥
-	pos (font_size * 16),(9.5 * font_size) : mes " m～"
-	pos (font_size * 19),(9.5 * font_size) : input limit_max_range,(font_size * 3),(font_size),4 ;⑦
-	pos (font_size * 22),(9.5 * font_size) : mes " m"
-	;先行車との適正距離（ｍ）
-	pos (font_size),(11.5 * font_size)      : mes "追従作業の適正距離"
-	pos (font_size * 13),(11.5 * font_size) : input min_range,(font_size * 3),(font_size),4;⑧
-	pos (font_size * 16),(11.5 * font_size) : mes " m～"
-	pos (font_size * 19),(11.5 * font_size) : input max_range,(font_size * 3),(font_size),4 ;⑨
-	pos (font_size * 22),(11.5 * font_size) : mes " m"
-	;左車線の車の時速（㎞/h）
-	pos (font_size),(13.5 * font_size)      : mes "左車線の車の速度"
-	pos (font_size * 13),(13.5 * font_size) : input left_car_speed,(font_size * 2),(font_size),3;⑩
-	pos (font_size * 15),(13.5 * font_size) : mes " km/h"
-	;右車線の車の時速（㎞/h）
-	pos (font_size),(15.5 * font_size) : mes "右車線の車の速度"
-	pos (font_size * 13),(15.5 * font_size) : input right_car_speed,(font_size * 2),(font_size),3;⑪
-	pos (font_size * 15),(15.5 * font_size) : mes " km/h"
-	;ボタンの設置
-	objsize (double(win_xsize)*0.25),(double(win_ysize)*0.08),100					;オブジェクトサイズ変更
-	pos (double(win_xsize)*0.05),(win_ysize - font_size*4)  : button goto "デフォルト", *default_set;⑫
-	pos (double(win_xsize)*0.375),(win_ysize - font_size*4) : button goto "設定を保存", *save_set_data;⑬
-	pos (double(win_xsize)*0.7),(win_ysize - font_size*4) : button goto "実験開始", *start_ex;⑭
-	
-	button_flag = 0
-	objenable 12,0
-	
-	;---------設定画面の待ちループ--------------------------------------------
-*set_up
-	if(win_size ! win_size2){
-		switch win_size
-		case 0
-			win_xsize = 800 : win_ysize = 600 : win_size2 = 0
-			swbreak
-		case 1
-			win_xsize = 1024 : win_ysize = 768 : win_size2 = 1
-			swbreak
-		case 2
-			win_xsize = 1280 : win_ysize = 720 : win_size2 = 2
-			swbreak
-		case 3
-			win_xsize = 1280 : win_ysize = 768 : win_size2 = 3
-			swbreak
-		case 4
-			win_xsize = 1360 : win_ysize = 768 : win_size2 = 4
-			swbreak
-		case 5
-			win_xsize = 1366 : win_ysize = 768 : win_size2 = 5
-			swbreak
-		case 6
-			win_xsize = 1400 : win_ysize = 1050 : win_size2 = 6
-			swbreak
-		case 7
-			win_xsize = 1920 : win_ysize = 1080 : : win_size2 = 7
-			swbreak
-		swend
-	}
-	
-	if(win_xsize = set_data(0))&&(flag = 0)         : button_flag = 0
-	if(win_ysize = set_data(1))&&(flag = 1)         : button_flag = 0
-	if(lead_car_speed1 = set_data(2))&&(flag = 2)   : button_flag = 0
-	if(lead_car_speed2 = set_data(3))&&(flag = 3)   : button_flag = 0
-	if(change_speed = set_data(4))&&(flag = 4)      : button_flag = 0
-	if(adjust_range = set_data(5))&&(flag = 5)      : button_flag = 0
-	if(limit_min_range = set_data(6))&&(flag = 6)   : button_flag = 0
-	if(limit_max_range = set_data(7))&&(flag = 7)   : button_flag = 0
-	if(min_range = set_data(8))&&(flag = 8)         : button_flag = 0
-	if(max_range = set_data(9))&&(flag = 9)         : button_flag = 0
-	if(left_car_speed = set_data(10))&&(flag = 10)  : button_flag = 0
-	if(right_car_speed = set_data(11))&&(flag = 11) : button_flag = 0
-	
-	if(button_flag = 0){
-		objenable 12,0 : objenable 13,1
-		if(win_xsize ! set_data(0))        : button_flag = 1 : flag = 0
-		if(win_ysize ! set_data(1))        : button_flag = 1 : flag = 1
-		if(lead_car_speed1 ! set_data(2))  : button_flag = 1 : flag = 2
-		if(lead_car_speed2 ! set_data(3))  : button_flag = 1 : flag = 3
-		if(change_speed ! set_data(4))     : button_flag = 1 : flag = 4
-		if(adjust_range ! set_data(5))     : button_flag = 1 : flag = 5
-		if(limit_min_range ! set_data(6))  : button_flag = 1 : flag = 6
-		if(limit_max_range ! set_data(7))  : button_flag = 1 : flag = 7
-		if(min_range ! set_data(8)) 	   : button_flag = 1 : flag = 8
-		if(max_range ! set_data(9))	       : button_flag = 1 : flag = 9
-		if(left_car_speed ! set_data(10))  : button_flag = 1 : flag = 10
-		if(right_car_speed ! set_data(11)) : button_flag = 1 : flag = 11
-	}
-	if(button_flag =1) : objenable 12,1 : objenable 13,0
-	
-	wait 2
-	goto *set_up
-	
-	;---------デフォルト設定を読み込むサブルーチン--------------------------------------------
-*default_set
-	setting_data = ""
-	notesel setting_data					;設定情報を保存するメモリノートパッド命令のバッファ名
-	noteload "config/default_data.txt"			;「setting_data」という変数に「setting_new_data.txt」の中身をロードする
-	notesave "config/setting_new_data.txt"
+	//screen 0,(win_xsize),(win_ysize),0,0,0  					;フロント画面の作成
 	goto *re_set
 	
 	;---------今の設定を保存するサブルーチン--------------------------------------------
 *save_set_data
-	sdim set_data2,12	
+	
+	click_default = 0						;デフォルトボタンのクリック記録を削除する
+	
 	;配列に新しい設定情報を格納(保存するとき文字列にしないと実数と整数の違いによりエラーが出る）
-	set_data2(0)  = str(win_xsize)			;画面サイズ（x）
-	set_data2(1)  = str(win_ysize)			;画面サイズ（y）
-	set_data2(2)  = str(lead_car_speed1)	;先行車の速度（最低速度）
-	set_data2(3)  = str(lead_car_speed2)	;先行車の速度（最高速度）
-	set_data2(4)  = str(change_speed)		;先行車の速度変化の段階数
-	set_data2(5)  = str(adjust_range)		;先行車の速度変化の段階数
-	set_data2(6)  = str(limit_min_range)	;先行車との適正距離（最短）
-	set_data2(7)  = str(limit_max_range)	;先行車との適正距離（最長）
-	set_data2(8)  = str(min_range)			;先行車との適正距離（最短）
-	set_data2(9)  = str(max_range)			;先行車との適正距離（最長）
-	set_data2(10) = str(left_car_speed)		;左車線を走行している車の時速
-	set_data2(11) = str(right_car_speed)	;右車線を走行している車の時速
+	set_data(0)  = str(win_xsize)			;画面サイズ（x）
+	set_data(1)  = str(win_ysize)			;画面サイズ（y）
+	set_data(2)  = str(lead_car_speed1)	;先行車の速度（最低速度）
+	set_data(3)  = str(lead_car_speed2)	;先行車の速度（最高速度）
+	set_data(4)  = str(change_speed)		;先行車の速度変化の段階数
+	set_data(5)  = str(adjust_range)		;先行車の速度変化の段階数
+	set_data(6)  = str(limit_min_range)	;先行車との適正距離（最短）
+	set_data(7)  = str(limit_max_range)	;先行車との適正距離（最長）
+	set_data(8)  = str(min_range)			;先行車との適正距離（最短）
+	set_data(9)  = str(max_range)			;先行車との適正距離（最長）
+	set_data(10) = str(left_car_speed)		;左車線を走行している車の時速
+	set_data(11) = str(right_car_speed)	;右車線を走行している車の時速
 	
 	setting_data = ""
 	notesel setting_data
 	;テキストに新しい設定を上書きする
 	repeat 12								;（始）テキストデータから設定情報を取り出すループ（始）
-		noteadd set_data2(cnt), cnt, 1
+		noteadd set_data(cnt), cnt, 1
 		notesave "config/setting_new_data.txt"
 	loop
+
 	goto *re_set
 	
 	////////////////////////////////実行開始////////////////////////////////
@@ -673,8 +648,8 @@ return
 
 //--------フレーム描画為ののサブルーチン---------------------------------------
 *alldraw
-
-	hgdraw 0
+	
+	hgdraw 
 	
 	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
 	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
@@ -705,12 +680,37 @@ return
 		if st_ex = 0 : start_time = time : st_ex = 1
 	}
 	
+	
+	hgview 200,0,200,150
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	hgview 400,0,200,150
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	hgview 600,0,200,150
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	//フロントカメラの設定
+	hgview 0,0,200,150
+	setpos HGOBJ_CAMERA, player_pos_x, player_pos_y-5, player_pos_z-30	; カメラ位置設定
+	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
+	hgdraw 1
+	
 	;----車間距離判定----
-	//gmode 3,100,100,75
-	//hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y-BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;上
-	//hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y+BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;下
-	//hgrect BLUE_FRAME_CENTER_X-BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT						;左
-	//hgrect BLUE_FRAME_CENTER_X+BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT
+	gmode 3,100,100,75
+	hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y-BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;上
+	hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y+BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;下
+	hgrect BLUE_FRAME_CENTER_X-BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT						;左
+	hgrect BLUE_FRAME_CENTER_X+BLUE_FRAME_WIDTH/2,BLUE_FRAME_CENTER_Y-10,0,BLUE_FRAME_THICKNESS,BLUE_FRAME_HEIGHT
 	
 	;------確認用フィードバック----------------
 	fprt "jisoku: "+int(jisoku2)+"km/h",8,70								;自車の時速[km/h]
@@ -725,28 +725,6 @@ return
 	;fprt "time_set: "+time_set+"",8,270									;現在の先行車の時速をセットした変更した時間
 	;fprt "syakan: "+syakan,8,290											;車間距離の状態「指定範囲内かどうか」
 	;fprt "CAR_pos_z-camera_pos_z: "+(CAR_pos_z-camera_pos_z)+"",8,310		;先行車との車間距離
-	
-	hgview 20,0,320,240
-	//バックカメラの設定
-	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
-	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
-	hgdraw 1
-	
-	hgview 350,0,320,240
-	//バックカメラの設定
-	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
-	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
-	hgdraw 1
-	
-	hgview 680,0,320,240
-	//バックカメラの設定
-	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
-	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
-	hgdraw 1
-	
-	//フロントカメラの設定
-	setpos HGOBJ_CAMERA, player_pos_x, player_pos_y-5, player_pos_z-30	; カメラ位置設定
-	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
 	
 	frame++				;フレーム回数カウント用変数
 	hgsync 14	;時間待ち（処理が速くなり過ぎないように）

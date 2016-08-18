@@ -234,7 +234,7 @@
 	
 	objmode 2, 1 							;この命令によりオブジェクト内のフォント調整がfont命令で，できるようなる
 
-	font_size = int(double(win_ysize) * 0.04558)	;フォントサイズを画面の大きさから設定
+	font_size = int(double(win_ysize/4) * 0.04558)	;フォントサイズを画面の大きさから設定
 	color 255,255,255 : font msgothic,font_size
 	;先行車の速度幅（km/h ～ km/h）
 	pos (font_size),(3.5 * font_size)      : mes "先行車の速度幅"
@@ -271,10 +271,10 @@
 	pos (font_size * 13),(15.5 * font_size) : input right_car_speed,(font_size * 2),(font_size),3;9
 	pos (font_size * 15),(15.5 * font_size) : mes " km/h"
 	;ボタンの設置
-	objsize (double(win_xsize)*0.25),(double(win_ysize)*0.08),100					;オブジェクトサイズ変更
-	pos (double(win_xsize)*0.05),(win_ysize - font_size*4)  : button goto "デフォルト", *default_set;10
-	pos (double(win_xsize)*0.375),(win_ysize - font_size*4) : button goto "設定を保存", *save_set_data;11
-	pos (double(win_xsize)*0.7),(win_ysize - font_size*4) : button goto "実験開始", *start_ex;12
+	objsize (double(win_xsize/4)*0.25),(double(win_ysize/4)*0.08),100					;オブジェクトサイズ変更
+	pos (double(win_xsize/4)*0.05),(win_ysize/4 - font_size*4)  : button goto "デフォルト", *default_set;10
+	pos (double(win_xsize/4)*0.375),(win_ysize/4 - font_size*4) : button goto "設定を保存", *save_set_data;11
+	pos (double(win_xsize/4)*0.7),(win_ysize/4 - font_size*4) : button goto "実験開始", *start_ex;12
 	
 	;---------設定画面の待ちループ--------------------------------------------
 *set_up
@@ -681,26 +681,26 @@ return
 	}
 	
 	
-	hgview 200,0,200,150
+	hgview 800,0,800,600
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
-	hgview 400,0,200,150
+	hgview 1600,0,800,600
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
-	hgview 600,0,200,150
+	hgview 2400,0,800,600
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
 	//フロントカメラの設定
-	hgview 0,0,200,150
+	hgview 0,0,800,600
 	setpos HGOBJ_CAMERA, player_pos_x, player_pos_y-5, player_pos_z-30	; カメラ位置設定
 	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
 	hgdraw 1

@@ -186,8 +186,8 @@
     setscale Leading_CAR, 5.5, 5.5, 5.5				;先行車両の大きさ
 
 	;他の車
-	car_model2 = readmodel("model/evo8-red.x")		;追い越し車線走行車両のモデルの読み込み
-	car_model3 = readmodel("model/evo8-black.x")	;走行車線走行車両のモデルの読み込み
+	car_model2 = readmodel("model/evo8-silver.x")		;追い越し車線走行車両のモデルの読み込み
+	car_model3 = readmodel("model/evo8-silver.x")	;走行車線走行車両のモデルの読み込み
 
 	;車両A－右車線
 	regobj R_CAR,car_model2,OBJ_STATIC				;追い越し車線走行車両の登録
@@ -370,11 +370,11 @@
 	
 	//設定した値を変数へ代入する
 	;追従作業のフィードバック
-	BLUE_FRAME_OFFSET_X	 = win_xsize/2								;画面中心からのオフセット　X
-	BLUE_FRAME_OFFSET_Y	 = win_ysize/2								;画面中心からのオフセット　Y
-	BLUE_FRAME_WIDTH	 = int(0.0977*win_xsize)					;横の長さ
-	BLUE_FRAME_HEIGHT	 = int(0.0912*win_ysize)					;縦の長さ
-	BLUE_FRAME_THICKNESS = int(0.0153*win_xsize*win_xsize/1000)		;線の太さ
+	BLUE_FRAME_OFFSET_X	 = (win_xsize/4)/2								;画面中心からのオフセット　X
+	BLUE_FRAME_OFFSET_Y	 = (win_ysize/4)/2								;画面中心からのオフセット　Y
+	BLUE_FRAME_WIDTH	 = int(0.0977*win_xsize/4)					;横の長さ
+	BLUE_FRAME_HEIGHT	 = int(0.0912*win_ysize/4)					;縦の長さ
+	BLUE_FRAME_THICKNESS = int(0.0153*(win_xsize/4)*(win_xsize/4)/1000)		;線の太さ
 
 	SHAKAN_MIN = double(min_range)/0.165							;枠から出たとみなす距離
 	SHAKAN_MAX = double(max_range)/0.165							;枠から出たとみなす距離
@@ -385,10 +385,10 @@
 	BLUE_FRAME_CENTER_Y	=	BLUE_FRAME_OFFSET_Y ;+ (ginfo_sizey/2)
 	
 	;カウントダウン番号，眠気評価の画像の大きさ・座標用変数
-	sign_xsize = int(0.3868 * win_xsize)			;画像の大きさ(X座標）
-	sign_ysize = int(0.3529 * win_ysize)			;画像の大きさ(Y座標）
-	sign_xpos  = (win_xsize - sign_xsize)/2		;画像の座標(X座標）
-	sign_ypos  = int(0.326 * win_ysize)			;画像の座標(Y座標）
+	sign_xsize = int(0.3868 * win_xsize/4)			;画像の大きさ(X座標）
+	sign_ysize = int(0.3529 * win_ysize/4)			;画像の大きさ(Y座標）
+	sign_xpos  = (win_xsize/4)/2					;画像の座標(X座標）
+	sign_ypos  = int(0.326 * win_ysize/4)			;画像の座標(Y座標）
 	;眠気評価用の大きさ・座標用変数
 	nemuke_xsize = int(0.625 * win_xsize)			;画像の大きさ(X座標）
 	nemuke_ysize = int(0.625 * win_ysize)			;画像の大きさ(Y座標）
@@ -664,22 +664,6 @@ return
 	time_m = elasped_time/60							;実験経過時間[min単位]
 	time_s = elasped_time\60							;実験経過時間[sec単位]
 	
-	;----カウントダウン----
-	;200座標を過ぎたら10カウントしたら実験開始
-	if (camera_pos_z > 200) && (cnt_n = 0){
-		cnt_n = 15							;カウント回数=10
-		sp_time = time						;スタート地点（z=200）を過ぎた時間
-	}
-	pos sign_xpos, sign_ypos : gmode 3,264,181,255
-	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 15) : hgrotate sec_ago15,0,0,0, sign_xsize, sign_ysize	;⑩
-	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 3) : hgrotate sec_ago3,0,0,0, sign_xsize, sign_ysize		;③
-	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 2) : hgrotate sec_ago2,0,0,0, sign_xsize, sign_ysize		;②
-	if (camera_pos_z > 200) &&  ((time - sp_time)/1000) = (cnt_n - 1) : hgrotate sec_ago1,0,0,0, sign_xsize, sign_ysize		;①
-	if (camera_pos_z > 200) && ((time - sp_time)/1000) = cnt_n{
-		hgrotate ready_go,0,0,0, sign_xsize, sign_ysize																		;Go!	
-		if st_ex = 0 : start_time = time : st_ex = 1
-	}
-	
 	
 	hgview 800,0,800,600
 	//バックカメラの設定
@@ -704,6 +688,22 @@ return
 	setpos HGOBJ_CAMERA, player_pos_x, player_pos_y-5, player_pos_z-30	; カメラ位置設定
 	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
 	hgdraw 1
+	
+	;----カウントダウン----
+	;200座標を過ぎたら10カウントしたら実験開始
+	if (camera_pos_z > 200) && (cnt_n = 0){
+		cnt_n = 15							;カウント回数=10
+		sp_time = time						;スタート地点（z=200）を過ぎた時間
+	}
+	pos sign_xpos, sign_ypos : gmode 3,264,181,255
+	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 15) : hgrotate sec_ago15,0,0,0, sign_xsize, sign_ysize	;⑩
+	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 3) : hgrotate sec_ago3,0,0,0, sign_xsize, sign_ysize		;③
+	if (camera_pos_z > 200) && ((time - sp_time)/1000) = (cnt_n - 2) : hgrotate sec_ago2,0,0,0, sign_xsize, sign_ysize		;②
+	if (camera_pos_z > 200) &&  ((time - sp_time)/1000) = (cnt_n - 1) : hgrotate sec_ago1,0,0,0, sign_xsize, sign_ysize		;①
+	if (camera_pos_z > 200) && ((time - sp_time)/1000) = cnt_n{
+		hgrotate ready_go,0,0,0, sign_xsize, sign_ysize																		;Go!	
+		if st_ex = 0 : start_time = time : st_ex = 1
+	}
 	
 	;----車間距離判定----
 	gmode 3,100,100,75

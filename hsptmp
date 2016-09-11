@@ -1,4 +1,5 @@
 #include "hgimg3.as"	;３Ｄを使いたいとき、ＨＳＰ拡張プラグインのヘッダーファイルが必要
+#include "hspda.as"		;csvを分析するためライブラリー
 #include "mod_joystick.as"
 
 	////////////////////////////////////////////
@@ -9,6 +10,8 @@
 	onexit	*exit	;プログラム終了時の割り込み処理（×ボタンを押すとそこ（指定ラベル）に飛ぶ）
 	
 	////////////////////////////////変数の定義////////////////////////////////
+	
+	#const OVER_TIME (1)					;一回実験の時間（min単位）
 	;テキストからデータを読み込む
 	setting_data = ""
 	notesel setting_data					;設定情報を保存するメモリノートパッド命令のバッファ名
@@ -20,6 +23,31 @@
 		if(set_data(cnt) = "") : break		;データが終わったらループを抜け出す
 	loop									;（終）テキストデータから設定情報を取り出すループ（終）
 	
+	
+	;後車の出現タイミングを読み込む
+	#const CAR_APPEAR_ROW      (3)			;データの行
+	#const CAR_APPEAR_COL      (4)			;データの列
+	sdim car_appear_buffer,10000
+	notesel car_appear_buffer				
+	noteload "config/car_appear.csv"
+	
+	sdim car_appear,CAR_APPEAR_ROW,CAR_APPEAR_COL		;車の出現タイミングを保存する二次元配列、毎行の内容は「出現タイミング（秒単位）」、「左か右か（L/R）」、「出現するとき自車との距離」、「スピード」
+	ddim car_appear_time,CAR_APPEAR_ROW					;処理しやすいために「出現タイミング（秒単位）」だけを保存する一次元配列
+	repeat
+		cy=cnt
+		noteget tmp,cnt						;先に一行を読み込む
+		if(tmp = "") : break
+		sdim t,CAR_APPEAR_COL,CAR_APPEAR_COL
+		csvstr t,tmp
+		repeat CAR_APPEAR_COL
+			if(cnt=0){
+				car_appear_time(cy)　= int(t(cnt))
+			}
+			car_appear(cnt,cy)=t(cnt)
+		loop
+	loop									
+	ddim car_appear_check,CAR_APPEAR_ROW					;車がすでに登場したかどうかのチェック配列
+		
 	;テキストから読み取った内容をそれぞれ変数に格納する
 	win_xsize       = int(set_data(0))		;画面サイズ（x）
 	win_ysize       = int(set_data(1))		;画面サイズ（y）
@@ -50,7 +78,7 @@
 	dim TREE_RIGHT,50									;右側　木
 
 	notesel save_data									;サンプリングデータ保存用
-	#const sampling  1000								;データ記録のサンプリング時間
+	#const sampling  500								;データ記録のサンプリング時間(ms単位)
 	
 	kyori = 0.0 : kyori1 = 0.0 : kyori2 = 0.0 : jisoku2 = 0.0			;時速計算用変数
 	aida = 0.0
@@ -61,7 +89,7 @@
 	sokudo = -3.5				;3.5 --> 約77.4 km/h
 	speed = 0.0 : car_speed = 0.0 : max_speed = 0.0
 	cnt_n = 0 
-	st_ex = 0
+	st_ex = 0					;実験開始しましたか
 	time_m = 0.0 : time_s = 0.0
 	time_set = 0.0
 	
@@ -75,7 +103,7 @@
 	hodou_loop == 0 : hodou_loop2 == 0							;
 	tree_loop  == 0 : tree_loop2  == 0							;
 	frame = 0
-	
+	mmload "sound/Bell.wav"
 	
 	////////////////////////////////関数の定義////////////////////////////////
 	#module
@@ -234,7 +262,7 @@
 	
 	objmode 2, 1 							;この命令によりオブジェクト内のフォント調整がfont命令で，できるようなる
 
-	font_size = int(double(win_ysize) * 0.04558)	;フォントサイズを画面の大きさから設定
+	font_size = int(double(win_ysize/4) * 0.04558)	;フォントサイズを画面の大きさから設定
 	color 255,255,255 : font msgothic,font_size
 	;先行車の速度幅（km/h ～ km/h）
 	pos (font_size),(3.5 * font_size)      : mes "先行車の速度幅"
@@ -271,10 +299,10 @@
 	pos (font_size * 13),(15.5 * font_size) : input right_car_speed,(font_size * 2),(font_size),3;9
 	pos (font_size * 15),(15.5 * font_size) : mes " km/h"
 	;ボタンの設置
-	objsize (double(win_xsize)*0.25),(double(win_ysize)*0.08),100					;オブジェクトサイズ変更
-	pos (double(win_xsize)*0.05),(win_ysize - font_size*4)  : button goto "デフォルト", *default_set;10
-	pos (double(win_xsize)*0.375),(win_ysize - font_size*4) : button goto "設定を保存", *save_set_data;11
-	pos (double(win_xsize)*0.7),(win_ysize - font_size*4) : button goto "実験開始", *start_ex;12
+	objsize (double(win_xsize/4)*0.25),(double(win_ysize/4)*0.08),100					;オブジェクトサイズ変更
+	pos (double(win_xsize/4)*0.05),(win_ysize/4 - font_size*4)  : button goto "デフォルト", *default_set;10
+	pos (double(win_xsize/4)*0.375),(win_ysize/4 - font_size*4) : button goto "設定を保存", *save_set_data;11
+	pos (double(win_xsize/4)*0.7),(win_ysize/4 - font_size*4) : button goto "実験開始", *start_ex;12
 	
 	;---------設定画面の待ちループ--------------------------------------------
 *set_up
@@ -370,11 +398,11 @@
 	
 	//設定した値を変数へ代入する
 	;追従作業のフィードバック
-	BLUE_FRAME_OFFSET_X	 = win_xsize/2								;画面中心からのオフセット　X
-	BLUE_FRAME_OFFSET_Y	 = win_ysize/2								;画面中心からのオフセット　Y
-	BLUE_FRAME_WIDTH	 = int(0.0977*win_xsize)					;横の長さ
-	BLUE_FRAME_HEIGHT	 = int(0.0912*win_ysize)					;縦の長さ
-	BLUE_FRAME_THICKNESS = int(0.0153*win_xsize*win_xsize/1000)		;線の太さ
+	BLUE_FRAME_OFFSET_X	 = (win_xsize/4)/2								;画面中心からのオフセット　X
+	BLUE_FRAME_OFFSET_Y	 = (win_ysize/4)/2								;画面中心からのオフセット　Y
+	BLUE_FRAME_WIDTH	 = int(0.0977*win_xsize/4)					;横の長さ
+	BLUE_FRAME_HEIGHT	 = int(0.0912*win_ysize/4)					;縦の長さ
+	BLUE_FRAME_THICKNESS = int(0.0153*(win_xsize/4)*(win_xsize/4)/1000)		;線の太さ
 
 	SHAKAN_MIN = double(min_range)/0.165							;枠から出たとみなす距離
 	SHAKAN_MAX = double(max_range)/0.165							;枠から出たとみなす距離
@@ -385,10 +413,10 @@
 	BLUE_FRAME_CENTER_Y	=	BLUE_FRAME_OFFSET_Y ;+ (ginfo_sizey/2)
 	
 	;カウントダウン番号，眠気評価の画像の大きさ・座標用変数
-	sign_xsize = int(0.3868 * win_xsize)			;画像の大きさ(X座標）
-	sign_ysize = int(0.3529 * win_ysize)			;画像の大きさ(Y座標）
-	sign_xpos  = (win_xsize - sign_xsize)/2		;画像の座標(X座標）
-	sign_ypos  = int(0.326 * win_ysize)			;画像の座標(Y座標）
+	sign_xsize = int(0.3868 * win_xsize/4)			;画像の大きさ(X座標）
+	sign_ysize = int(0.3529 * win_ysize/4)			;画像の大きさ(Y座標）
+	sign_xpos  = (win_xsize/4)/2					;画像の座標(X座標）
+	sign_ypos  = int(0.326 * win_ysize/4)			;画像の座標(Y座標）
 	;眠気評価用の大きさ・座標用変数
 	nemuke_xsize = int(0.625 * win_xsize)			;画像の大きさ(X座標）
 	nemuke_ysize = int(0.625 * win_ysize)			;画像の大きさ(Y座標）
@@ -398,7 +426,7 @@
 	;左車線・右車線の自動車の速度用変数
 	L_CAR_S = 0.2777778 * double(left_car_speed) * 0.015 * 6.0		;左車線を走行してる車の移動量
 	R_CAR_S = 0.2777778 * double(right_car_speed) * 0.015 * 6.0		;右車線を走行してる車の移動量
-	
+			
 	gsel 0,1				;フロント画面アクティブ
 	clrobj					;前半部のボタンやインプットボックスなどを消去
 	
@@ -426,7 +454,22 @@
 	loop
 	
 	;描画のメインループ-----------------------------------------------------------------------------------------
-*main	
+*main
+	
+	;----経過時間の取得----
+	;起動時からの経過時間[ms]
+	hggettime time,0		;hgini命令を通過してからの経過時間を 1ms 単位で取得	 ※ただし、上限は100000 msまで,それを超えると0 msから数え直す
+	hggettime count,1		;上限である100000 msを超えた回数の取得
+	time = count*100000+time-push_time	;現在の経過時間の算出
+	;実験経過時間[s]&[min]
+	if st_ex = 1 : elasped_time = (time - start_time)/1000				;総実験経過時間[sec]　=　(time_m)*60 ＋ (time_s)秒
+	time_m = elasped_time/60							;実験経過時間[min単位]
+	time_s = elasped_time\60							;実験経過時間[sec単位]
+	
+	if(time_m >= OVER_TIME){
+		gosub *exit
+	}
+	
 	kyori1 = camera_pos_z 
 	
 	getpos HGOBJ_CAMERA,camera_pos_x,camera_pos_y,camera_pos_z	;カメラの位置(座標)を取得
@@ -473,7 +516,7 @@ goto *main
 	stick key,15	;操作キーの設定（押しっぱなしでも検出）
 	if 1=key : addang player,0.0,0.008,0.00		;カメラの左旋回
 	if 4=key : addang player,0.0,-0.008,0.0		;カメラの右旋回
-	
+    if key = 16 : mmplay 
 	if(2=key)&(speed<29050) : speed = speed -0.006615		;カメラの加速
 	if 8=key : speed = speed + 0.00926154					;カメラの減速
 	//ジョイスティック（ハンドル）で操作
@@ -621,27 +664,27 @@ return
 	if (CAR_pos_z-camera_pos_z)>SHAKAN_MIN && (CAR_pos_z-camera_pos_z)<SHAKAN_MAX : color 0,255,0 : syakan=0
 
 	
+	repeat CAR_APPEAR_ROW
+		if( (car_appear_time(cnt) <= elasped_time)&( car_appear_check(cnt) = 0 ) ){
+			car_appear_check(cnt) = 1.0
+			if(car_appear(1,cnt)="L"){
+				setpos L_CAR, 22, 0, camera_pos_z-int(car_appear(2,cnt))		;自身の座標から100座標後ろに設置
+				L_CAR_S = 0.2777778 * double(car_appear(3,cnt)) * 0.015 * 6.0		;左車線を走行してる車の移動量
+			}
+			if(car_appear(1,cnt)="R"){
+				setpos R_CAR, -22, 0, camera_pos_z-int(car_appear(2,cnt))		;自身の座標から100座標後ろに設置
+				R_CAR_S = 0.2777778 * double(car_appear(3,cnt)) * 0.015 * 6.0		;右車線を走行してる車の移動量
+			}
+		}
+	loop
+
 	;----右車線の車----
 	addpos R_CAR,0.0,0.0,R_CAR_S 					;右車線の車は110km/hで走行？
 	getpos R_CAR,r_car_x,r_car_y,r_car_z					;右車線の車の座標を取得
-	;見えなくなった車を後方へ設置
-	if(r_car_z >= camera_pos_z+780){
-		setpos R_CAR, -22, 0, camera_pos_z-100		;自身の座標から100座標後ろに設置
-	}
-	//if(r_car_z < camera_pos_z-30){
-		//setpos R_CAR, -22, 0, camera_pos_z+500+20*rnd(4)		;自身の座標から500～650座標後ろに設置
-	//}
 	
 	;----左車線の車----
 	addpos L_CAR,0.0,0.0,L_CAR_S 					;左車線の車は100km/hで走行？
 	getpos L_CAR,l_car_x,l_car_y,l_car_z					;左車線の車の座標を取得
-	;見えなくなった車を後方へ設置
-	if(l_car_z >= camera_pos_z+500){
-		setpos L_CAR, 22, 0, camera_pos_z-100		;自身の座標から100座標後ろに設置
-	}
-	//if(l_car_z < camera_pos_z-30){
-		//setpos L_CAR, 22, 0, camera_pos_z+500+20*rnd(4)		;自身の座標から500～650座標前に設置
-	//}
 	
 return
 
@@ -654,15 +697,29 @@ return
 	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
 	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
 	
-	;----経過時間の取得----
-	;起動時からの経過時間[ms]
-	hggettime time,0		;hgini命令を通過してからの経過時間を 1ms 単位で取得	 ※ただし、上限は100000 msまで,それを超えると0 msから数え直す
-	hggettime count,1		;上限である100000 msを超えた回数の取得
-	time = count*100000+time-push_time	;現在の経過時間の算出
-	;実験経過時間[s]&[min]
-	if st_ex = 1 : elasped_time = (time - start_time)/1000				;総実験経過時間[sec]　=　(time_m)*60 ＋ (time_s)秒
-	time_m = elasped_time/60							;実験経過時間[min単位]
-	time_s = elasped_time\60							;実験経過時間[sec単位]
+	hgview 800,0,800,600
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	hgview 1600,0,800,600
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	hgview 2400,0,800,600
+	//バックカメラの設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	//フロントカメラの設定
+	hgview 0,0,800,600
+	setpos HGOBJ_CAMERA, player_pos_x, player_pos_y-5, player_pos_z-30	; カメラ位置設定
+	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
+	hgdraw 1
 	
 	;----カウントダウン----
 	;200座標を過ぎたら10カウントしたら実験開始
@@ -680,31 +737,6 @@ return
 		if st_ex = 0 : start_time = time : st_ex = 1
 	}
 	
-	
-	hgview 200,0,200,150
-	//バックカメラの設定
-	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
-	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
-	hgdraw 1
-	
-	hgview 400,0,200,150
-	//バックカメラの設定
-	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
-	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
-	hgdraw 1
-	
-	hgview 600,0,200,150
-	//バックカメラの設定
-	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
-	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
-	hgdraw 1
-	
-	//フロントカメラの設定
-	hgview 0,0,200,150
-	setpos HGOBJ_CAMERA, player_pos_x, player_pos_y-5, player_pos_z-30	; カメラ位置設定
-	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
-	hgdraw 1
-	
 	;----車間距離判定----
 	gmode 3,100,100,75
 	hgrect BLUE_FRAME_CENTER_X,BLUE_FRAME_CENTER_Y-BLUE_FRAME_HEIGHT/2-10,0,BLUE_FRAME_WIDTH+BLUE_FRAME_THICKNESS,BLUE_FRAME_THICKNESS	;上
@@ -714,17 +746,9 @@ return
 	
 	;------確認用フィードバック----------------
 	fprt "jisoku: "+int(jisoku2)+"km/h",8,70								;自車の時速[km/h]
-	;fprt "elapsed_time:"+elasped_time,8,90									;実験開始からの経過時間[sec]
-	;fprt "nemuketi:"+nemuketi,8,110										;眠気の状態
 	fprt "time:"+time_m+" min "+time_s+" sec",8,130							;経過時間を分・秒で表示
-	;fprt "s_time:"+s_time,8,150											;サンプリング回数
-	;fprt "camera_ang_y: "+camera_ang_y,8,190								;車の傾き(方向･角度）
 	fprt "camera_pos_x: "+camera_pos_x,8,210								;車の走行距離(座標）
-	;fprt "car_speed: "+car_speed,8,230										;先行車の１フレームでの座標移動距離
 	fprt "lead_car_speed: "+car_sokudo+"km/h",8,250							;先行車の時速[km/h]
-	;fprt "time_set: "+time_set+"",8,270									;現在の先行車の時速をセットした変更した時間
-	;fprt "syakan: "+syakan,8,290											;車間距離の状態「指定範囲内かどうか」
-	;fprt "CAR_pos_z-camera_pos_z: "+(CAR_pos_z-camera_pos_z)+"",8,310		;先行車との車間距離
 	
 	frame++				;フレーム回数カウント用変数
 	hgsync 14	;時間待ち（処理が速くなり過ぎないように）
@@ -733,12 +757,30 @@ return
 
 //*************************
 *sampling_data
+	
+	//button_click
+	button_click = 0
+	//トラキング誤差
+	tracking = 0
+	//memは左・右車が自車の後ろにあるかどうかを記録する
+	mem=""
+	if( l_car_z < camera_pos_z){
+		mem += "L"
+	}
+	if( r_car_z < camera_pos_z){
+		mem += "R"
+	}
 	notesel save_data
-	noteadd ""+s_time+","+time+","+elasped_time+","+camera_pos_z+","+camera_pos_x+","+nemuketi+","+b_state+","+syakan+","+(CAR_pos_z - camera_pos_z)+","+car_sokudo+","+pedal+","+pedal_per ,s_time,1
+	//			回数		goからの時間	　移動量		ボタン押す		車間距離　　			 速度	トラキング誤差	pedal量	pedal_per	mem
+	noteadd ""+s_time+","+elasped_time+","+camera_pos_z+","+button_click+","+(CAR_pos_z-camera_pos_z)+","+speed+","+tracking+","+pedal+","+pedal_per+","+mem+","+l_car_z+","+r_car_z ,s_time,1
 	s_time++
 return
 	
 	////////////////////////////////終了前の操作////////////////////////////////
 *exit
+	notesel save_data
+	dialog "*",17,"テキストファイル"	;保存用のダイアログを別ウインドウで表示
+	if stat=1 : notesave refstr+".txt"	;ファイル名を記載した場合、その名前のテキストファイル作成
+	
 	end		;onexitで割り込み処理をする場合、endを書かなければウインドウを閉じれなくなるので注意
 	

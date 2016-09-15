@@ -68,7 +68,7 @@
 	;---------car_appear.csv関連--------------------------------------------
 	;後車の出現タイミングを読み込む
 	#const CAR_APPEAR_ROW      (3)			;データの行
-	#const CAR_APPEAR_COL      (4)			;データの列
+	#const CAR_APPEAR_COL      (5)			;データの列
 	sdim car_appear_buffer,10000
 	notesel car_appear_buffer				
 	noteload "config/car_appear.csv"
@@ -83,14 +83,15 @@
 		csvstr t,tmp
 		repeat CAR_APPEAR_COL
 			if(cnt=0){
-				car_appear_time(cy)　= int(t(cnt))
+				car_appear_time(cy) = int(t(cnt))
 			}
 			car_appear(cnt,cy)=t(cnt)
 		loop
 	loop									
 	ddim car_appear_check,CAR_APPEAR_ROW					;車がすでに登場したかどうかのチェック配列
 	button_click = ""										;後車に気付いたかどうかのボタンフラグ
-	
+	LisRed = 0
+	RisRed = 0
 	;---------それ以外--------------------------------------------
 	screen 0,(win_xsize),(win_ysize),0,0,0  					;フロント画面の作成
 	gsel 0,1				;フロント画面アクティブ
@@ -104,6 +105,7 @@
 	dim TREE_RIGHT,50									;右側　木
 
 	notesel save_data									;サンプリングデータ保存用
+	noteadd "総サンプリング回数,goからの時間[ms],走行距離,スイッチの状態,車間距離,自車速度,トラッキング,ペダルの状態,ペダルの踏み込み具合[%],メモ,左車の位置,右車の位置"
 	#const sampling  500								;データ記録のサンプリング時間(ms単位)
 	
 	kyori = 0.0 : kyori1 = 0.0 : kyori2 = 0.0 : jisoku2 = 0.0			;時速計算用変数
@@ -233,16 +235,16 @@
     setscale Leading_CAR, 5.5, 5.5, 5.5				;先行車両の大きさ
 
 	;他の車
-	car_model2 = readmodel("model/evo8-red.x")		;追い越し車線走行車両のモデルの読み込み
-	car_model3 = readmodel("model/evo8-black.x")	;走行車線走行車両のモデルの読み込み
+	car_modelRed = readmodel("model/evo8-red.x")		;追い越し車線走行車両のモデルの読み込み
+	car_modelBlack = readmodel("model/evo8-black.x")	;走行車線走行車両のモデルの読み込み
 
 	;車両A－右車線
-	regobj R_CAR,car_model2,OBJ_STATIC				;追い越し車線走行車両の登録
+	regobj R_CAR,car_modelRed,OBJ_STATIC				;追い越し車線走行車両の登録
 	setpos R_CAR, -22, 0, 0							;追い越し車線走行車両の初期位置の設定
  	setang R_CAR, 0, M_PI, 0						;追い越し車線走行車両の向きの設定
 	setscale R_CAR, 5.5, 5.5, 5.5					;追い越し車線走行車両の大きさの設定
 	;車両B－左車線
-	regobj L_CAR,car_model3,OBJ_STATIC				;走行車線走行車両の登録
+	regobj L_CAR,car_modelBlack,OBJ_STATIC				;走行車線走行車両の登録
 	setpos L_CAR, 22, 0, 0							;走行車線走行車両の初期位置の設定
  	setang L_CAR, 0, M_PI, 0						;走行車線走行車両の向きの設定
 	setscale L_CAR, 5.5, 5.5, 5.5					;走行車線走行車両の大きさの設定
@@ -365,8 +367,8 @@ goto *main
 	if 8=key : speed = speed + 0.00926154					;カメラの減速
 	
 	
-	if key = 64 : button_click += "L" : mmplay		;Ctrlキーを押す
-	if key = 16 : button_click += "R" : mmplay		;スペースキーを押す
+	if (key = 64) & ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "L")) : button_click += "L" : mmplay		;Ctrlキーを押す
+	if (key = 16) & ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "R")) : button_click += "R" : mmplay		;スペースキーを押す
 	
 	//ジョイスティック（ハンドル）で操作
 	joyGetPosEx data,0	;ハンドル（ゲームパット）の設定
@@ -380,9 +382,18 @@ goto *main
 	if (data.3 < 32511) : pedal = "アクセル" : pedal_per = (32511 - data.3)*100/32511		;ペダルの状態＆ペダルの踏み込み具合(アクセル）
 	if (data.3 > 32511) : pedal = "ブレーキ" : pedal_per = (data.3)*100/32767 - 100		;ペダルの状態＆ペダルの踏み込み具合（ブレーキ）
 	
-	if (data.8) : button_click += "L" : mmplay		;左ボタンを押す
-	if (data.8) : button_click += "R" : mmplay		;右ボタンを押す
+	if (data.8 & 0x00000001) & ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "R")) : button_click += "R" : mmplay
+	if (data.8 & 0x00000002) & ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "R")) : button_click += "R" : mmplay 
+	if (data.8 & 0x00000004) & ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "R")) : button_click += "R" : mmplay 
+	if (data.8 & 0x00000008) & ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "R")) : button_click += "R" : mmplay
 	
+	pov = data(10)
+	if (pov & 0xFFFF)!0xFFFF {
+		if ((pov=31500)|(pov=    0)|(pov= 4500))& ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "L")) : button_click += "L" : mmplay
+		if ((pov= 4500)|(pov= 9000)|(pov=13500))& ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "L")) : button_click += "L" : mmplay
+		if ((pov=13500)|(pov=18000)|(pov=22500))& ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "L")) : button_click += "L" : mmplay
+		if ((pov=22500)|(pov=27000)|(pov=31500))& ( (button_click != "LR") & (button_click ! "RL") & (button_click ! "L")) : button_click += "L" : mmplay
+	}
 	;----操作による位置情報への反映----
 	;アクセルの踏み込み量に合わせて最大速度を調整
 	if (31427 <= data.3)&&(data.3 < 32511) : max_speed = -0.1257269		; 0  ～ 5km
@@ -520,10 +531,28 @@ return
 		if( (car_appear_time(cnt) <= elasped_time)&( car_appear_check(cnt) = 0 ) ){
 			car_appear_check(cnt) = 1.0
 			if(car_appear(1,cnt)="L"){
+				if(car_appear(4,cnt)="R"){
+					LisRed = 1
+					setobjmodel L_CAR,car_modelRed
+				}
+				if(car_appear(4,cnt)="B"){
+					LisRed = 0
+					setobjmodel L_CAR,car_modelBlack
+				}
+
 				setpos L_CAR, 22, 0, camera_pos_z-int(car_appear(2,cnt))		;自身の座標から100座標後ろに設置
 				L_CAR_S = 0.2777778 * double(car_appear(3,cnt)) * 0.015 * 6.0		;左車線を走行してる車の移動量
 			}
 			if(car_appear(1,cnt)="R"){
+				if(car_appear(4,cnt)="R"){
+					RisRed = 1
+					setobjmodel R_CAR,car_modelRed
+				}
+				if(car_appear(4,cnt)="B"){
+					RisRed = 0
+					setobjmodel R_CAR,car_modelBlack
+				}
+	
 				setpos R_CAR, -22, 0, camera_pos_z-int(car_appear(2,cnt))		;自身の座標から100座標後ろに設置
 				R_CAR_S = 0.2777778 * double(car_appear(3,cnt)) * 0.015 * 6.0		;右車線を走行してる車の移動量
 			}
@@ -549,19 +578,19 @@ return
 	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
 	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
 	
-	hgview 800,0,800,600
+	hgview 800,0,720,576
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
-	hgview 1600,0,800,600
+	hgview 1520,0,800,600
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
-	hgview 2400,0,800,600
+	hgview 2320,0,720,576
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
@@ -611,15 +640,24 @@ return
 *sampling_data
 	//memは左・右車が自車の後ろにあるかどうかを記録する
 	mem=""
-	if( l_car_z < camera_pos_z){
+	if( ( l_car_z < camera_pos_z ) & ( LisRed = 1 ) ){
 		mem += "L"
 	}
-	if( r_car_z < camera_pos_z){
+	if( ( r_car_z < camera_pos_z) & ( RisRed = 1 ) ){
 		mem += "R"
 	}
+	
+	;elasped_timeは整数型で、こちらは0.5秒ごとサンプリングしますから、改めて時間をとります
+	;起動時からの経過時間[ms]
+	hggettime time,0		;hgini命令を通過してからの経過時間を 1ms 単位で取得	 ※ただし、上限は100000 msまで,それを超えると0 msから数え直す
+	hggettime count,1		;上限である100000 msを超えた回数の取得
+	time = count*100000+time-push_time	;現在の経過時間の算出
+	;実験経過時間[s]&[min]
+	if st_ex = 1 : elasped_time2 = double((time - start_time))/1000				;総実験経過時間[sec]　=　(time_m)*60 ＋ (time_s)秒
+	
 	notesel save_data
-	//			回数		goからの時間	　移動量		ボタン押す		車間距離　　			 速度	トラキング	pedal量	pedal_per	mem
-	noteadd ""+s_time+","+elasped_time+","+camera_pos_z+","+button_click+","+(CAR_pos_z-camera_pos_z)+","+speed+","+camera_pos_x+","+pedal+","+pedal_per+","+mem+","+l_car_z+","+r_car_z ,s_time,1
+	//			回数		goからの時間	　走行距離		スイッチの状態		車間距離　　			 自車速度	トラキング		pedal量		pedal_per	mem
+	noteadd ""+s_time+","+elasped_time2+","+camera_pos_z+","+button_click+","+(CAR_pos_z-camera_pos_z)+","+speed+","+camera_pos_x+","+pedal+","+pedal_per+","+mem+","+l_car_z+","+r_car_z ,s_time+1,1
 	s_time++
 	button_click = ""	;後車に気付いたかどうかのボタンフラグをクリアする
 return
@@ -627,6 +665,7 @@ return
 	////////////////////////////////終了前の操作////////////////////////////////
 *exit
 	notesel save_data
+	noteadd "総サンプリング回数,goからの時間[ms],走行距離,スイッチの状態,車間距離,自車速度,トラッキング,ペダルの状態,ペダルの踏み込み具合[%],メモ,左車の位置,右車の位置"
 	dialog "*",17,"テキストファイル"	;保存用のダイアログを別ウインドウで表示
 	if stat=1 : notesave refstr+".txt"	;ファイル名を記載した場合、その名前のテキストファイル作成
 	

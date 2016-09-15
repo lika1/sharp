@@ -252,7 +252,7 @@
 	;矢印（自車）
 	setuv 0,0,63,92                    ;矢印の画像を読み込む位置
 	addplate yajirushi_model,1,5,35    ;矢印の大きさ ID,モード,横,縦
-	arrowTex = readTex("pic/矢印3.bmp")	
+	arrowTex = readTex("pic/none.png")	
 	regobj player,yajirushi_model
 	setang player,-M_PI/2,M_PI,0		;矢印の向き???
 	
@@ -578,19 +578,19 @@ return
 	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
 	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
 	
-	hgview 800,0,800,600
+	hgview 800,0,720,576
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
-	hgview 1600,0,800,600
+	hgview 1520,0,800,600
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
-	hgview 2400,0,800,600
+	hgview 2320,0,720,576
 	//バックカメラの設定
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定

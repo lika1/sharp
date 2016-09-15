@@ -11,7 +11,7 @@
 	
 	////////////////////////////////変数の定義////////////////////////////////
 	
-	#const OVER_TIME (1)					;一回実験の時間（min単位）
+	#const OVER_TIME (10)					;一回実験の時間（min単位）
 	
 	;---------setting_data関連--------------------------------------------
 	;テキストからデータを読み込む
@@ -67,7 +67,7 @@
 	
 	;---------car_appear.csv関連--------------------------------------------
 	;後車の出現タイミングを読み込む
-	#const CAR_APPEAR_ROW      (3)			;データの行
+	#const CAR_APPEAR_ROW      (72)			;データの行
 	#const CAR_APPEAR_COL      (5)			;データの列
 	sdim car_appear_buffer,10000
 	notesel car_appear_buffer				

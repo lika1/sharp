@@ -6,9 +6,10 @@
 	//定義区
 	//すべての変数や関数はここで定義をしておきます、モデルもここで読み込みます。
 	////////////////////////////////////////////
-	randomize				;乱数の初期化
-	onexit	*exit	;プログラム終了時の割り込み処理（×ボタンを押すとそこ（指定ラベル）に飛ぶ）
-	
+	randomize			;乱数の初期化
+	onexit	*exit		;プログラム終了時の割り込み処理（×ボタンを押すとそこ（指定ラベル）に飛ぶ）
+	arrow_switch = 1	;矢印がある（１）かない（０）か
+	moniter_size = 5	; 3.5(3.5inch)/5(5inch)/7(7inch)/321（3 to 1）
 	////////////////////////////////変数の定義////////////////////////////////
 	
 	#const OVER_TIME (10)					;一回実験の時間（min単位）
@@ -235,8 +236,9 @@
     setscale Leading_CAR, 5.5, 5.5, 5.5				;先行車両の大きさ
 
 	;他の車
-	car_modelRed = readmodel("model/evo8-red.x")		;追い越し車線走行車両のモデルの読み込み
-	car_modelBlack = readmodel("model/evo8-black.x")	;走行車線走行車両のモデルの読み込み
+	car_modelRed = readmodel("model/evo8-red.x")
+	car_modelBlack = readmodel("model/evo8-black.x")
+	car_modelWhite = readmodel("model/sedan2-white.x")
 
 	;車両A－右車線
 	regobj R_CAR,car_modelRed,OBJ_STATIC				;追い越し車線走行車両の登録
@@ -252,7 +254,11 @@
 	;矢印（自車）
 	setuv 0,0,63,92                    ;矢印の画像を読み込む位置
 	addplate yajirushi_model,1,5,35    ;矢印の大きさ ID,モード,横,縦
-	arrowTex = readTex("pic/none.png")
+	if(arrow_switch = 1){
+		arrowTex = readTex("pic/矢印3.bmp")
+	}else{
+		arrowTex = readTex("pic/none.png")
+	}
 	regobj player,yajirushi_model
 	setang player,-M_PI/2,M_PI,0		;矢印の向き???
 	
@@ -537,7 +543,12 @@ return
 				}
 				if(car_appear(4,cnt)="B"){
 					LisRed = 0
-					setobjmodel L_CAR,car_modelBlack
+					a=rnd(10)
+					if (a <= 4){
+						setobjmodel L_CAR,car_modelBlack
+					}else{
+						setobjmodel L_CAR,car_modelWhite
+					}
 				}
 
 				setpos L_CAR, 22, 0, camera_pos_z-int(car_appear(2,cnt))		;自身の座標から100座標後ろに設置
@@ -578,20 +589,53 @@ return
 	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
 	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
 	
-	hgview 800,0,720,576
-	//バックカメラの設定
+	//左サイドカメラの設定
+	if(moniter_size = 3.5){
+		hgview 800,0,720,576
+	}
+	
+	if(moniter_size = 321){
+		hgview 800,0,720,576
+	}
+	
+	if(moniter_size = 5 | moniter_size = 7){
+		hgview 800,0,800,600
+	}
+	
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(150),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
-	hgview 1520,0,720,576
 	//バックカメラの設定
+	if(moniter_size = 3.5){
+		hgview 1520,0,800,600
+	}
+	
+	if(moniter_size = 321){
+		hgview 1520,0,720,576
+	}
+	
+	if(moniter_size = 5 | moniter_size = 7){
+		hgview 1600,0,800,600
+	}
+	
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
-	hgview 2240,0,720,576
-	//バックカメラの設定
+	//右サイドカメラの設定
+	if(moniter_size = 3.5){
+		hgview 2320,0,720,576
+	}
+	
+	if(moniter_size = 321){
+		hgview 2240,0,720,576
+	}
+	
+	if(moniter_size = 5 | moniter_size = 7){
+		hgview 2400,0,800,600
+	}
+	
 	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-150),camera_ang_z; カメラ向き設定
 	hgdraw 1

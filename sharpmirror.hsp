@@ -1,7 +1,6 @@
 #include "hgimg3.as"	;３Ｄを使いたいとき、ＨＳＰ拡張プラグインのヘッダーファイルが必要
 #include "hspda.as"		;csvを分析するためライブラリー
 #include "mod_joystick.as"
-#include "mod_hgcapture2.hsp"
 
 	////////////////////////////////////////////
 	//定義区
@@ -10,10 +9,9 @@
 	randomize			;乱数の初期化
 	onexit	*exit		;プログラム終了時の割り込み処理（×ボタンを押すとそこ（指定ラベル）に飛ぶ）
 	arrow_switch = 1	;矢印がある（１）かない（０）か
-	moniter_size = 7	; 3.5(3.5inch)/5(5inch)/7(7inch)/321（3 to 1）
+	moniter_size = 5	; 3.5(3.5inch)/5(5inch)/7(7inch)/321（3 to 1）
 	car_appear_patten = 11 ; 後車の出現パターン(7＾12)
 	////////////////////////////////変数の定義////////////////////////////////
-	
 	
 	#const OVER_TIME (10)					;一回実験の時間（min単位）
 	
@@ -98,10 +96,6 @@
 	RisRed = 0
 	;---------それ以外--------------------------------------------
 	screen 0,(win_xsize),(win_ysize),0,0,0  					;フロント画面の作成
-	buffer 1,(win_xsize),(win_ysize)
-	screen 2,800,600,0,0,0 :title "左サイドミラー画面"
-	screen 4,800,600,0,0,0 :title "右サイドミラー画面"
-	
 	gsel 0,1				;フロント画面アクティブ
 	color : boxf					;画面全体を黒く塗りつぶす
 	
@@ -224,17 +218,15 @@
 
 	;木の準備
 	treeTex = readTexAlpha("pic/tree.tga")											;木のテクスチャの登録
-	treeTex2 = readTexAlpha("pic/tree2.tga")	
 	addplate tree_model,1,15,30,0,0,255,255,treeTex									;木の登録
-	addplate tree_model2,1,15,30,0,0,255,255,treeTex2
 	repeat 50
 		;右側50個
 		regobj TREE_RIGHT(49-cnt), tree_model, OBJ_STATIC|OBJ_TREE|OBJ_LATE			;
 		setpos TREE_RIGHT(49-cnt), 40+0.5*rnd(20), -14.5, 25*(24-cnt)+0.5*rnd(10)	;
 		;左側50個																	;
-		regobj TREE_LEFT(49-cnt),  tree_model2, OBJ_STATIC|OBJ_TREE|OBJ_LATE		;
+		regobj TREE_LEFT(49-cnt),  tree_model, OBJ_STATIC|OBJ_TREE|OBJ_LATE			;
 		setpos TREE_LEFT(49-cnt), -40-0.5*rnd(20), -14.5, 25*(24-cnt)+0.5*rnd(10)	;
-	loop									;
+	loop							;
 	
 	;---------車両の読み込み--------------------------------------------
 	;先行車両
@@ -597,8 +589,6 @@ return
 	
 	getpos player,player_pos_x,player_pos_y,player_pos_z	;自車の位置(座標)を取得
 	getang player,player_ang_x,player_ang_y,player_ang_z	;自車の前向きの角度を取得
-	getpos HGOBJ_CAMERA,camera_pos_x_temp,camera_pos_y_temp,camera_pos_z_temp	;カメラの位置(座標)を取得
-	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
 	
 	//左サイドカメラの設定
 	if(moniter_size = 3.5){
@@ -613,28 +603,11 @@ return
 		hgview 800,0,800,600
 	}
 	
-	setpos HGOBJ_CAMERA,camera_pos_x_temp+4.8,camera_pos_y_temp,camera_pos_z_temp
-	setang HGOBJ_CAMERA,camera_ang_x, camera_ang_y + deg2rad(185),camera_ang_z; カメラ向き設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(151),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
 	//バックカメラの設定
-	if(moniter_size = 3.5){
-		hgview 1520,0,800,600
-	}
-	
-	if(moniter_size = 321){
-		hgview 1520,0,720,576
-	}
-	
-	if(moniter_size = 5 | moniter_size = 7){
-		hgview 1600,0,800,600
-	}
-	
-	setpos HGOBJ_CAMERA,camera_pos_x_temp,camera_pos_y_temp,camera_pos_z_temp
-	setang HGOBJ_CAMERA,camera_ang_x, camera_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
-	hgdraw 1
-	
-	//右サイドカメラの設定
 	if(moniter_size = 3.5){
 		hgview 2320,0,720,576
 	}
@@ -647,8 +620,25 @@ return
 		hgview 2400,0,800,600
 	}
 	
-	setpos HGOBJ_CAMERA,camera_pos_x_temp-4.8,camera_pos_y_temp,camera_pos_z_temp
-	setang HGOBJ_CAMERA,camera_ang_x, camera_ang_y - deg2rad(185),camera_ang_z; カメラ向き設定
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(180),camera_ang_z; カメラ向き設定
+	hgdraw 1
+	
+	//右サイドカメラの設定
+	if(moniter_size = 3.5){
+		hgview 1520,0,800,600
+	}
+	
+	if(moniter_size = 321){
+		hgview 1520,0,720,576
+	}
+	
+	if(moniter_size = 5 | moniter_size = 7){
+		hgview 1600,0,800,600
+	}
+
+	getang HGOBJ_CAMERA,camera_ang_x,camera_ang_y,camera_ang_z	;カメラの角度を取得
+	setang HGOBJ_CAMERA,camera_ang_x, player_ang_y - deg2rad(-151),camera_ang_z; カメラ向き設定
 	hgdraw 1
 	
 	//フロントカメラの設定
@@ -657,37 +647,6 @@ return
 	setang HGOBJ_CAMERA,0,player_ang_y,0	; カメラ向き設定
 	hgdraw 1
 	
-	
-	
-	//コピー先HSPウィンドウID,コピー元座標,コピーサイズ,コピー先座標を指定出来ます
-	//hgcapture2   id, s_left, s_top, s_sizx, s_sizy, d_left, d_top
-	//idを指定しない場合現在の描画先にコピーされる（hgcaptureと同じ）
-    hgcapture2 1	 ; HGIMGの画面をHSPバッファにコピー
-	
-	//左サイドミラー画面
-	gsel 2
-    color 0,100,0 : boxf
-    gmode 0,800,600
-    pos 400,300
-    grotate 1,800,0,0,800,600
-    pos 800-1,0
-    gzoom -800,600,2,0,0,800,600
-    redraw
-    redraw 0
- 
-    //右サイドミラー画面
-	gsel 4
-    color 0,100,0 : boxf
-    gmode 0,800,600
-    pos 400,300
-    grotate 1,2400,0,0,800,600
-    pos 800-1,0
-    gzoom -800,600,4,0,0,800,600
-    redraw
-    redraw 0
-    
-    gsel 0
-    
 	;----カウントダウン----
 	;200座標を過ぎたら10カウントしたら実験開始
 	if (camera_pos_z > 200) && (cnt_n = 0){
